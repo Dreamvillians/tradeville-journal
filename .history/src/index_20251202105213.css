@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Tradeville Dark Theme - Financial Luxury */
+    --background: 222 47% 4%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 6%;
+    --popover-foreground: 210 40% 98%;
+
+    /* Blue accent for primary actions */
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 4%;
+
+    --secondary: 215 25% 15%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 215 25% 12%;
+    --muted-foreground: 215 16% 65%;
+
+    --accent: 217 91% 60%;
+    --accent-foreground: 222 47% 4%;
+
+    /* Rose for losses */
+    --destructive: 347 77% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    /* Emerald for profits */
+    --success: 142 76% 36%;
+    --success-foreground: 210 40% 98%;
+
+    --border: 215 25% 15%;
+    --input: 215 25% 15%;
+    --ring: 217 91% 60%;
+
+    --radius: 0.75rem;
+
+    /* Sidebar */
+    --sidebar-background: 222 47% 6%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 222 47% 4%;
+    --sidebar-accent: 215 25% 12%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 215 25% 15%;
+    --sidebar-ring: 217 91% 60%;
+
+    /* Smooth transitions */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700;800&display=swap');
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+  }
+}

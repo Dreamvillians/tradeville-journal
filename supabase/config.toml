@@ -1,0 +1,7 @@
+project_id = "lcfsggmanqqarpnodysx"
+
+[functions.analyze-trades]
+verify_jwt = true
+
+[functions.predict-trade]
+verify_jwt = true

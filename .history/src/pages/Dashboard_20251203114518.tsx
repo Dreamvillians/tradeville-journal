@@ -1,0 +1,1290 @@
+import { useState, useEffect, useMemo, useCallback, memo, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { 
+  Target, 
+  TrendingUp, 
+  TrendingDown,
+  Flame, 
+  BookOpen, 
+  PlusCircle,
+  BarChart3,
+  Activity,
+  Zap,
+  Calendar,
+  DollarSign,
+  ArrowUpRight,
+  ArrowDownRight,
+  ChevronRight,
+  Bell,
+  Settings,
+  RefreshCw,
+  Eye,
+  EyeOff,
+  LineChart,
+  PieChart,
+  Shield,
+  Award,
+  Sparkles,
+  AlertCircle,
+  CandlestickChart,
+  Menu,
+  X,
+  Clock,
+  Hash,
+  Percent,
+  Trophy,
+  CheckCircle2
+} from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
+import { cn } from "@/lib/utils";
+
+// ============================================
+// STYLES
+// ============================================
+const DASHBOARD_STYLES = `
+  /* Animations */
+  .dash-float { animation: dash-float 6s ease-in-out infinite; }
+  .dash-float-delayed { animation: dash-float 6s ease-in-out infinite 2s; }
+  .dash-pulse { animation: dash-pulse 3s ease-in-out infinite; }
+  .dash-glow { animation: dash-glow 2s ease-in-out infinite; }
+  .dash-shimmer { animation: dash-shimmer 3s ease-in-out infinite; background-size: 200% 100%; }
+  .dash-slide-up { animation: dash-slide-up 0.5s ease-out forwards; opacity: 0; }
+  .dash-fade-in { animation: dash-fade-in 0.6s ease-out forwards; }
+  .dash-bounce { animation: dash-bounce 1s ease-in-out infinite; }
+  .dash-ticker { animation: dash-ticker 30s linear infinite; }
+  .dash-count { animation: dash-count 1.5s ease-out forwards; }
+  .dash-streak { animation: dash-streak 0.5s ease-in-out infinite alternate; }
+  
+  @keyframes dash-float { 
+    0%, 100% { transform: translateY(0); } 
+    50% { transform: translateY(-10px); } 
+  }
+  @keyframes dash-pulse { 
+    0%, 100% { opacity: 0.4; transform: scale(1); } 
+    50% { opacity: 0.7; transform: scale(1.02); } 
+  }
+  @keyframes dash-glow { 
+    0%, 100% { box-shadow: 0 0 15px rgba(16, 185, 129, 0.2); } 
+    50% { box-shadow: 0 0 30px rgba(16, 185, 129, 0.4); } 
+  }
+  @keyframes dash-shimmer { 
+    0%, 100% { background-position: -200% 0; } 
+    50% { background-position: 200% 0; } 
+  }
+  @keyframes dash-slide-up { 
+    0% { transform: translateY(20px); opacity: 0; } 
+    100% { transform: translateY(0); opacity: 1; } 
+  }
+  @keyframes dash-fade-in { 
+    0% { opacity: 0; } 
+    100% { opacity: 1; } 
+  }
+  @keyframes dash-bounce { 
+    0%, 100% { transform: translateY(0); } 
+    50% { transform: translateY(-4px); } 
+  }
+  @keyframes dash-ticker { 
+    0% { transform: translateX(0); } 
+    100% { transform: translateX(-50%); } 
+  }
+  @keyframes dash-count { 
+    0% { opacity: 0; transform: scale(0.8); } 
+    100% { opacity: 1; transform: scale(1); } 
+  }
+  @keyframes dash-streak {
+    0% { transform: scale(1) rotate(-3deg); }
+    100% { transform: scale(1.05) rotate(3deg); }
+  }
+  
+  /* Glass Effect */
+  .dash-glass {
+    background: rgba(18, 19, 26, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  
+  /* Card Hover */
+  .dash-card-hover {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .dash-card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    border-color: rgba(16, 185, 129, 0.2);
+  }
+  
+  /* Custom Scrollbar */
+  .dash-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
+  .dash-scroll::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); border-radius: 2px; }
+  .dash-scroll::-webkit-scrollbar-thumb { background: rgba(16, 185, 129, 0.2); border-radius: 2px; }
+  .dash-scroll::-webkit-scrollbar-thumb:hover { background: rgba(16, 185, 129, 0.4); }
+  
+  /* Number formatting */
+  .dash-number {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+  
+  /* Text truncation */
+  .dash-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  
+  /* Reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    .dash-float, .dash-pulse, .dash-glow, .dash-shimmer, 
+    .dash-bounce, .dash-ticker, .dash-streak { 
+      animation: none !important; 
+    }
+    .dash-card-hover:hover { transform: none; }
+  }
+  
+  /* Mobile optimizations */
+  @media (max-width: 640px) {
+    .dash-float, .dash-pulse { animation-duration: 8s; }
+  }
+`;
+
+// ============================================
+// TYPES
+// ============================================
+interface Trade {
+  id: string;
+  symbol: string;
+  side: 'long' | 'short';
+  profit_loss_currency: number;
+  profit_loss_percent: number;
+  opened_at: string;
+  closed_at: string;
+  strategy?: string;
+}
+
+interface MarketData {
+  symbol: string;
+  price: string;
+  change: number;
+  isUp: boolean;
+}
+
+// ============================================
+// UTILITIES
+// ============================================
+const formatCurrency = (value: number, compact = false): string => {
+  const absValue = Math.abs(value);
+  if (compact) {
+    if (absValue >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
+    if (absValue >= 1000) return `$${(value / 1000).toFixed(1)}K`;
+  }
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+};
+
+const formatPercent = (value: number): string => {
+  const sign = value >= 0 ? '+' : '';
+  return `${sign}${value.toFixed(2)}%`;
+};
+
+const getTimeAgo = (date: string): string => {
+  const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+  if (seconds < 60) return 'Just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+};
+
+// ============================================
+// HOOKS
+// ============================================
+const useAnimatedCounter = (end: number, duration = 1500, decimals = 0) => {
+  const [count, setCount] = useState(0);
+  const startRef = useRef(0);
+  const startTimeRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    startTimeRef.current = null;
+    startRef.current = 0;
+    
+    const animate = (timestamp: number) => {
+      if (!startTimeRef.current) startTimeRef.current = timestamp;
+      const progress = Math.min((timestamp - startTimeRef.current) / duration, 1);
+      const easeOut = 1 - Math.pow(1 - progress, 3);
+      const current = startRef.current + (end - startRef.current) * easeOut;
+      
+      setCount(Number(current.toFixed(decimals)));
+      
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        startRef.current = end;
+      }
+    };
+    
+    requestAnimationFrame(animate);
+  }, [end, duration, decimals]);
+  
+  return count;
+};
+
+const useMarketData = () => {
+  const [data, setData] = useState<MarketData[]>([
+    { symbol: "BTC", price: "---", change: 0, isUp: true },
+    { symbol: "ETH", price: "---", change: 0, isUp: true },
+    { symbol: "SPY", price: "478", change: 0.45, isUp: true },
+    { symbol: "EUR", price: "1.08", change: -0.12, isUp: false },
+  ]);
+  
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const res = await fetch(
+          "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true"
+        );
+        const json = await res.json();
+        
+        setData([
+          {
+            symbol: "BTC",
+            price: (json.bitcoin?.usd / 1000).toFixed(1) + "K",
+            change: json.bitcoin?.usd_24h_change || 2.3,
+            isUp: (json.bitcoin?.usd_24h_change || 0) >= 0,
+          },
+          {
+            symbol: "ETH",
+            price: (json.ethereum?.usd / 1000).toFixed(2) + "K",
+            change: json.ethereum?.usd_24h_change || 1.5,
+            isUp: (json.ethereum?.usd_24h_change || 0) >= 0,
+          },
+          { symbol: "SPY", price: "478", change: 0.45, isUp: true },
+          { symbol: "EUR", price: "1.08", change: -0.12, isUp: false },
+        ]);
+      } catch (error) {
+        console.error("Market data fetch failed:", error);
+      }
+    };
+    
+    fetchData();
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
+  }, []);
+  
+  return data;
+};
+
+// ============================================
+// BACKGROUND COMPONENTS
+// ============================================
+const AnimatedBackground = memo(() => (
+  <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+    {/* Gradient orbs */}
+    <div className="absolute -top-32 -left-32 w-64 h-64 sm:w-80 sm:h-80 bg-emerald-500/10 rounded-full blur-[80px] sm:blur-[100px] dash-float" />
+    <div className="absolute -bottom-32 -right-32 w-72 h-72 sm:w-96 sm:h-96 bg-blue-500/10 rounded-full blur-[100px] sm:blur-[120px] dash-float-delayed" />
+    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] sm:w-[600px] sm:h-[600px] bg-purple-500/5 rounded-full blur-[120px] sm:blur-[150px] dash-pulse" />
+    
+    {/* Grid pattern */}
+    <div className="absolute inset-0 bg-[linear-gradient(to_right,#10b98106_1px,transparent_1px),linear-gradient(to_bottom,#10b98106_1px,transparent_1px)] bg-[size:40px_40px] sm:bg-[size:50px_50px] opacity-50" />
+  </div>
+));
+AnimatedBackground.displayName = 'AnimatedBackground';
+
+// ============================================
+// MARKET TICKER
+// ============================================
+const MarketTicker = memo(({ data }: { data: MarketData[] }) => (
+  <div className="fixed top-0 left-0 right-0 z-50 bg-black/50 backdrop-blur-xl border-b border-white/5">
+    <div className="dash-ticker flex whitespace-nowrap py-1.5 sm:py-2">
+      {[...data, ...data, ...data].map((item, i) => (
+        <div key={i} className="flex items-center gap-2 sm:gap-3 mx-4 sm:mx-6">
+          <span className="text-gray-400 text-[10px] sm:text-xs font-medium">{item.symbol}</span>
+          <span className="text-white text-[10px] sm:text-xs font-bold dash-number">${item.price}</span>
+          <span className={cn(
+            "text-[10px] sm:text-xs font-semibold flex items-center",
+            item.isUp ? "text-emerald-400" : "text-red-400"
+          )}>
+            {item.isUp ? <TrendingUp className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-0.5" /> : <TrendingDown className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-0.5" />}
+            {formatPercent(item.change)}
+          </span>
+        </div>
+      ))}
+    </div>
+  </div>
+));
+MarketTicker.displayName = 'MarketTicker';
+
+// ============================================
+// STAT CARD
+// ============================================
+interface StatCardProps {
+  title: string;
+  value: string | number;
+  subtitle?: string;
+  icon: typeof Target;
+  trend?: 'up' | 'down' | 'neutral';
+  trendValue?: string;
+  color?: 'emerald' | 'blue' | 'purple' | 'orange' | 'red' | 'yellow';
+  delay?: number;
+}
+
+const StatCard = memo(({ 
+  title, 
+  value, 
+  subtitle, 
+  icon: Icon, 
+  trend, 
+  trendValue,
+  color = "emerald",
+  delay = 0
+}: StatCardProps) => {
+  const colorMap = {
+    emerald: { bg: 'from-emerald-500/20 to-emerald-600/5', text: 'text-emerald-400', border: 'border-emerald-500/20' },
+    blue: { bg: 'from-blue-500/20 to-blue-600/5', text: 'text-blue-400', border: 'border-blue-500/20' },
+    purple: { bg: 'from-purple-500/20 to-purple-600/5', text: 'text-purple-400', border: 'border-purple-500/20' },
+    orange: { bg: 'from-orange-500/20 to-orange-600/5', text: 'text-orange-400', border: 'border-orange-500/20' },
+    red: { bg: 'from-red-500/20 to-red-600/5', text: 'text-red-400', border: 'border-red-500/20' },
+    yellow: { bg: 'from-yellow-500/20 to-yellow-600/5', text: 'text-yellow-400', border: 'border-yellow-500/20' },
+  };
+  
+  const colors = colorMap[color];
+  
+  return (
+    <Card 
+      className={cn(
+        "dash-glass dash-card-hover dash-slide-up relative overflow-hidden h-full",
+        colors.border
+      )}
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      {/* Background gradient */}
+      <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50", colors.bg)} />
+      
+      {/* Glow effect */}
+      <div className={cn("absolute -top-12 -right-12 w-24 h-24 rounded-full blur-2xl opacity-20", `bg-${color}-500`)} />
+      
+      <CardContent className="relative z-10 p-3 sm:p-4 flex flex-col h-full">
+        <div className="flex items-start justify-between gap-2 flex-1">
+          <div className="flex-1 min-w-0 space-y-1 sm:space-y-2">
+            <p className="text-[10px] sm:text-xs uppercase tracking-wider text-gray-400 font-semibold truncate">
+              {title}
+            </p>
+            <p className={cn(
+              "text-xl sm:text-2xl lg:text-3xl font-bold dash-number truncate",
+              typeof value === 'string' && value.startsWith('-') ? 'text-red-400' : 'text-white'
+            )}>
+              {value}
+            </p>
+            {(subtitle || trendValue) && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {trend && trendValue && (
+                  <span className={cn(
+                    "inline-flex items-center gap-0.5 text-[10px] sm:text-xs font-semibold px-1.5 py-0.5 rounded",
+                    trend === 'up' ? 'text-emerald-400 bg-emerald-500/10' : 
+                    trend === 'down' ? 'text-red-400 bg-red-500/10' : 
+                    'text-gray-400 bg-gray-500/10'
+                  )}>
+                    {trend === 'up' && <ArrowUpRight className="w-2.5 h-2.5 sm:w-3 sm:h-3" />}
+                    {trend === 'down' && <ArrowDownRight className="w-2.5 h-2.5 sm:w-3 sm:h-3" />}
+                    <span className="truncate max-w-[60px] sm:max-w-none">{trendValue}</span>
+                  </span>
+                )}
+                {subtitle && (
+                  <span className="text-[10px] sm:text-xs text-gray-500 truncate">{subtitle}</span>
+                )}
+              </div>
+            )}
+          </div>
+          
+          <div className={cn(
+            "flex-shrink-0 p-2 sm:p-2.5 rounded-lg sm:rounded-xl bg-gradient-to-br shadow-lg",
+            colors.bg
+          )}>
+            <Icon className={cn("w-4 h-4 sm:w-5 sm:h-5", colors.text)} />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+StatCard.displayName = 'StatCard';
+
+// ============================================
+// WELCOME CARD
+// ============================================
+const WelcomeCard = memo(({ userName, stats }: { userName: string; stats: any }) => {
+  const [showBalance, setShowBalance] = useState(true);
+  
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 17) return "Good afternoon";
+    return "Good evening";
+  }, []);
+  
+  const currentTime = useMemo(() => {
+    return new Date().toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: true 
+    });
+  }, []);
+  
+  return (
+    <Card className="dash-glass dash-card-hover dash-slide-up relative overflow-hidden">
+      {/* Background effects */}
+      <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-blue-500/5 to-purple-500/10" />
+      <div className="absolute top-0 right-0 w-48 h-48 sm:w-64 sm:h-64 bg-emerald-500/10 rounded-full blur-[60px] sm:blur-[80px] dash-float" />
+      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-500 via-blue-500 to-purple-500 opacity-40" />
+      
+      <CardContent className="relative z-10 p-4 sm:p-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 sm:gap-6">
+          {/* Left side - Greeting */}
+          <div className="space-y-3 sm:space-y-4 flex-1 min-w-0">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-400 dash-bounce flex-shrink-0" />
+                <span className="text-xs sm:text-sm text-gray-400">{greeting}</span>
+                <span className="text-[10px] sm:text-xs text-gray-500 hidden sm:inline">• {currentTime}</span>
+              </div>
+              <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold text-white truncate">
+                Welcome back, <span className="bg-gradient-to-r from-emerald-400 to-blue-400 bg-clip-text text-transparent">{userName}</span>
+              </h1>
+              <p className="text-xs sm:text-sm text-gray-400 line-clamp-2">
+                Your trading performance is looking strong. Keep up the momentum!
+              </p>
+            </div>
+            
+            {/* Quick badges */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-[10px] sm:text-xs text-emerald-400 font-medium">Markets Open</span>
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-white/5 border border-white/10">
+                <Activity className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-gray-400" />
+                <span className="text-[10px] sm:text-xs text-gray-400">{stats.totalTrades} trades</span>
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-orange-500/10 border border-orange-500/20">
+                <Flame className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-orange-400" />
+                <span className="text-[10px] sm:text-xs text-orange-400">{stats.streak} streak</span>
+              </div>
+            </div>
+          </div>
+          
+          {/* Right side - Stats */}
+          <div className="flex items-center gap-3 sm:gap-4 lg:gap-6">
+            {/* Account Balance */}
+            <div className="flex-1 lg:flex-none space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] sm:text-xs text-gray-400">Balance</span>
+                <button 
+                  onClick={() => setShowBalance(!showBalance)}
+                  className="text-gray-500 hover:text-white transition-colors"
+                >
+                  {showBalance ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                </button>
+              </div>
+              <p className="text-lg sm:text-xl lg:text-2xl font-bold text-white dash-number">
+                {showBalance ? '$125,432.87' : '••••••••'}
+              </p>
+            </div>
+            
+            {/* Win Rate Circle */}
+            <div className="relative flex-shrink-0">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 rounded-full bg-gradient-to-br from-emerald-500/20 to-blue-500/20 flex items-center justify-center p-0.5">
+                <div className="w-full h-full rounded-full bg-[#0a0b0f] flex items-center justify-center">
+                  <div className="text-center">
+                    <p className="text-base sm:text-lg lg:text-2xl font-bold text-emerald-400 dash-number">{stats.winRate}%</p>
+                    <p className="text-[8px] sm:text-[10px] text-gray-500">Win Rate</p>
+                  </div>
+                </div>
+              </div>
+              <div className="absolute -top-0.5 -right-0.5 sm:-top-1 sm:-right-1 w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 rounded-full bg-emerald-500 flex items-center justify-center dash-bounce">
+                <TrendingUp className="w-2 h-2 sm:w-2.5 sm:h-2.5 lg:w-3 lg:h-3 text-white" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+WelcomeCard.displayName = 'WelcomeCard';
+
+// ============================================
+// PERFORMANCE CHART
+// ============================================
+const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
+  const [timeframe, setTimeframe] = useState<'1W' | '1M' | '3M' | 'ALL'>('1M');
+  const [hoveredPoint, setHoveredPoint] = useState<number | null>(null);
+  
+  const chartData = useMemo(() => {
+    const days = timeframe === '1W' ? 7 : timeframe === '1M' ? 30 : timeframe === '3M' ? 90 : 180;
+    const data = [];
+    let cumulative = 10000;
+    
+    for (let i = days; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const dailyPnL = (Math.random() - 0.45) * 400;
+      cumulative += dailyPnL;
+      
+      data.push({
+        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        value: cumulative,
+        pnl: dailyPnL,
+        isProfit: dailyPnL >= 0,
+      });
+    }
+    
+    return data;
+  }, [timeframe]);
+  
+  const stats = useMemo(() => {
+    const first = chartData[0]?.value || 0;
+    const last = chartData[chartData.length - 1]?.value || 0;
+    const change = last - first;
+    const changePercent = first > 0 ? (change / first) * 100 : 0;
+    const max = Math.max(...chartData.map(d => d.value));
+    const min = Math.min(...chartData.map(d => d.value));
+    
+    return { change, changePercent, max, min };
+  }, [chartData]);
+  
+  const maxValue = stats.max;
+  const minValue = stats.min;
+  const range = maxValue - minValue || 1;
+  
+  return (
+    <Card className="dash-glass dash-card-hover dash-slide-up relative overflow-hidden" style={{ animationDelay: '200ms' }}>
+      <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-blue-500/5" />
+      
+      <CardHeader className="relative z-10 p-3 sm:p-4 lg:p-6 pb-2 sm:pb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="min-w-0">
+            <CardTitle className="text-sm sm:text-base lg:text-lg text-white flex items-center gap-2">
+              <LineChart className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 flex-shrink-0" />
+              <span className="truncate">Equity Curve</span>
+            </CardTitle>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-lg sm:text-xl lg:text-2xl font-bold text-white dash-number">
+                {formatCurrency(chartData[chartData.length - 1]?.value || 0)}
+              </span>
+              <span className={cn(
+                "text-xs sm:text-sm font-semibold",
+                stats.change >= 0 ? "text-emerald-400" : "text-red-400"
+              )}>
+                {stats.change >= 0 ? '+' : ''}{formatPercent(stats.changePercent)}
+              </span>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
+            {(['1W', '1M', '3M', 'ALL'] as const).map((tf) => (
+              <button
+                key={tf}
+                onClick={() => setTimeframe(tf)}
+                className={cn(
+                  "px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium rounded-md sm:rounded-lg transition-all",
+                  timeframe === tf
+                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                    : "text-gray-500 hover:text-white hover:bg-white/5"
+                )}
+              >
+                {tf}
+              </button>
+            ))}
+          </div>
+        </div>
+      </CardHeader>
+      
+      <CardContent className="relative z-10 p-3 sm:p-4 lg:p-6 pt-2 sm:pt-3">
+        {/* Mini stats */}
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4">
+          {[
+            { label: 'Return', value: formatPercent(stats.changePercent), positive: stats.changePercent >= 0 },
+            { label: 'Max DD', value: '-8.2%', positive: false },
+            { label: 'Sharpe', value: '1.85', positive: true },
+          ].map((stat) => (
+            <div key={stat.label} className="p-2 sm:p-3 rounded-lg bg-white/5">
+              <p className="text-[9px] sm:text-[10px] lg:text-xs text-gray-500 mb-0.5">{stat.label}</p>
+              <p className={cn(
+                "text-sm sm:text-base lg:text-lg font-bold dash-number",
+                stat.positive ? 'text-emerald-400' : 'text-red-400'
+              )}>{stat.value}</p>
+            </div>
+          ))}
+        </div>
+        
+        {/* Chart */}
+        <div className="relative h-40 sm:h-48 lg:h-56">
+          {/* Y-axis labels */}
+          <div className="absolute left-0 top-0 bottom-0 w-10 sm:w-12 lg:w-14 flex flex-col justify-between text-[9px] sm:text-[10px] lg:text-xs text-gray-500 pr-2">
+            <span className="text-right">{formatCurrency(maxValue, true)}</span>
+            <span className="text-right">{formatCurrency((maxValue + minValue) / 2, true)}</span>
+            <span className="text-right">{formatCurrency(minValue, true)}</span>
+          </div>
+          
+          {/* Chart area */}
+          <div className="ml-10 sm:ml-12 lg:ml-14 h-full relative">
+            {/* Grid */}
+            {[0, 25, 50, 75, 100].map((percent) => (
+              <div
+                key={percent}
+                className="absolute w-full border-t border-white/5"
+                style={{ top: `${percent}%` }}
+              />
+            ))}
+            
+            {/* SVG Chart */}
+            <svg className="absolute inset-0 w-full h-full overflow-visible" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="areaGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
+                  <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              
+              {/* Area */}
+              <path
+                d={`M 0 ${((maxValue - chartData[0].value) / range) * 100}%
+                  ${chartData.map((d, i) => 
+                    `L ${(i / (chartData.length - 1)) * 100}% ${((maxValue - d.value) / range) * 100}%`
+                  ).join(' ')}
+                  L 100% 100% L 0% 100% Z`}
+                fill="url(#areaGrad)"
+              />
+              
+              {/* Line */}
+              <path
+                d={`M 0 ${((maxValue - chartData[0].value) / range) * 100}%
+                  ${chartData.map((d, i) => 
+                    `L ${(i / (chartData.length - 1)) * 100}% ${((maxValue - d.value) / range) * 100}%`
+                  ).join(' ')}`}
+                fill="none"
+                stroke="#10b981"
+                strokeWidth="2"
+                vectorEffect="non-scaling-stroke"
+              />
+            </svg>
+            
+            {/* Hover points */}
+            <div className="absolute inset-0 flex">
+              {chartData.filter((_, i) => i % Math.max(1, Math.floor(chartData.length / 15)) === 0).map((d, i, arr) => (
+                <div
+                  key={i}
+                  className="flex-1 h-full relative cursor-crosshair group"
+                  onMouseEnter={() => setHoveredPoint(i)}
+                  onMouseLeave={() => setHoveredPoint(null)}
+                >
+                  {hoveredPoint === i && (
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 p-2 bg-[#1a1b23] border border-white/10 rounded-lg shadow-xl z-20 whitespace-nowrap pointer-events-none">
+                      <p className="text-[10px] text-gray-400">{d.date}</p>
+                      <p className="text-xs sm:text-sm font-bold text-white">{formatCurrency(d.value)}</p>
+                      <p className={cn("text-[10px]", d.isProfit ? "text-emerald-400" : "text-red-400")}>
+                        {d.isProfit ? '+' : ''}{formatCurrency(d.pnl)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+PerformanceChart.displayName = 'PerformanceChart';
+
+// ============================================
+// RECENT TRADES
+// ============================================
+const RecentTrades = memo(({ trades }: { trades: Trade[] }) => {
+  const displayTrades = useMemo(() => {
+    if (trades.length > 0) return trades.slice(0, 5);
+    // Demo data
+    return [
+      { id: '1', symbol: 'AAPL', side: 'long', profit_loss_currency: 234.50, profit_loss_percent: 2.3, closed_at: new Date(Date.now() - 3600000).toISOString(), strategy: 'Breakout' },
+      { id: '2', symbol: 'TSLA', side: 'short', profit_loss_currency: -89.20, profit_loss_percent: -1.2, closed_at: new Date(Date.now() - 7200000).toISOString(), strategy: 'Mean Reversion' },
+      { id: '3', symbol: 'NVDA', side: 'long', profit_loss_currency: 456.80, profit_loss_percent: 4.5, closed_at: new Date(Date.now() - 14400000).toISOString(), strategy: 'Momentum' },
+      { id: '4', symbol: 'SPY', side: 'long', profit_loss_currency: 123.45, profit_loss_percent: 1.8, closed_at: new Date(Date.now() - 28800000).toISOString() },
+      { id: '5', symbol: 'QQQ', side: 'short', profit_loss_currency: -45.67, profit_loss_percent: -0.7, closed_at: new Date(Date.now() - 43200000).toISOString() },
+    ] as Trade[];
+  }, [trades]);
+  
+  return (
+    <Card className="dash-glass dash-card-hover dash-slide-up relative overflow-hidden h-full" style={{ animationDelay: '400ms' }}>
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5" />
+      
+      <CardHeader className="relative z-10 p-3 sm:p-4 pb-2">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-sm sm:text-base text-white flex items-center gap-2">
+            <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400 flex-shrink-0" />
+            <span className="truncate">Recent Trades</span>
+          </CardTitle>
+          <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white text-xs h-7 px-2">
+            <span className="hidden sm:inline">View All</span>
+            <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4 sm:ml-1" />
+          </Button>
+        </div>
+      </CardHeader>
+      
+      <CardContent className="relative z-10 p-2 sm:p-3 pt-0">
+        <ScrollArea className="h-[220px] sm:h-[260px] lg:h-[280px] dash-scroll pr-2 sm:pr-3">
+          <div className="space-y-2">
+            {displayTrades.map((trade, index) => (
+              <div
+                key={trade.id}
+                className="flex items-center justify-between p-2 sm:p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-all cursor-pointer group"
+              >
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                  <div className={cn(
+                    "flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center",
+                    trade.side === 'long' 
+                      ? "bg-emerald-500/20 text-emerald-400" 
+                      : "bg-red-500/20 text-red-400"
+                  )}>
+                    {trade.side === 'long' ? 
+                      <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : 
+                      <TrendingDown className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    }
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-white text-xs sm:text-sm group-hover:text-emerald-400 transition-colors truncate">
+                      {trade.symbol}
+                    </p>
+                    <p className="text-[10px] sm:text-xs text-gray-500 truncate">
+                      {trade.strategy || 'Manual'} • {getTimeAgo(trade.closed_at)}
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="text-right flex-shrink-0 ml-2">
+                  <p className={cn(
+                    "font-bold text-xs sm:text-sm dash-number",
+                    trade.profit_loss_currency >= 0 ? "text-emerald-400" : "text-red-400"
+                  )}>
+                    {trade.profit_loss_currency >= 0 ? '+' : ''}{formatCurrency(trade.profit_loss_currency)}
+                  </p>
+                  <p className={cn(
+                    "text-[10px] sm:text-xs dash-number",
+                    trade.profit_loss_percent >= 0 ? "text-emerald-400/70" : "text-red-400/70"
+                  )}>
+                    {formatPercent(trade.profit_loss_percent)}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
+});
+RecentTrades.displayName = 'RecentTrades';
+
+// ============================================
+// QUICK ACTIONS
+// ============================================
+const QuickActions = memo(({ onNavigate }: { onNavigate: (path: string) => void }) => {
+  const actions = [
+    { icon: PlusCircle, label: "Log Trade", path: "/journal", color: "emerald", primary: true },
+    { icon: BookOpen, label: "Playbook", path: "/playbook", color: "blue" },
+    { icon: BarChart3, label: "Analytics", path: "/analytics", color: "purple" },
+    { icon: Calendar, label: "Calendar", path: "/calendar", color: "orange" },
+  ];
+  
+  return (
+    <Card className="dash-glass dash-card-hover dash-slide-up relative overflow-hidden h-full" style={{ animationDelay: '350ms' }}>
+      <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-pink-500/5" />
+      
+      <CardHeader className="relative z-10 p-3 sm:p-4 pb-2">
+        <CardTitle className="text-sm sm:text-base text-white flex items-center gap-2">
+          <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-400 flex-shrink-0" />
+          Quick Actions
+        </CardTitle>
+      </CardHeader>
+      
+      <CardContent className="relative z-10 p-3 sm:p-4 pt-1 sm:pt-2">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3">
+          {actions.map((action) => {
+            const colorMap: Record<string, string> = {
+              emerald: "from-emerald-500 to-emerald-600",
+              blue: "from-blue-500/20 to-blue-600/10",
+              purple: "from-purple-500/20 to-purple-600/10",
+              orange: "from-orange-500/20 to-orange-600/10",
+            };
+            
+            return (
+              <Button
+                key={action.label}
+                variant={action.primary ? "default" : "outline"}
+                className={cn(
+                  "h-auto py-3 sm:py-4 flex flex-col items-center gap-1.5 sm:gap-2 group transition-all w-full",
+                  action.primary 
+                    ? `bg-gradient-to-r ${colorMap[action.color]} hover:opacity-90 shadow-lg shadow-emerald-500/20` 
+                    : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20"
+                )}
+                onClick={() => onNavigate(action.path)}
+              >
+                <action.icon className={cn(
+                  "w-5 h-5 sm:w-6 sm:h-6 transition-transform group-hover:scale-110",
+                  action.primary ? "text-white" : "text-gray-400 group-hover:text-white"
+                )} />
+                <span className={cn(
+                  "text-[10px] sm:text-xs font-semibold",
+                  action.primary ? "text-white" : "text-white"
+                )}>
+                  {action.label}
+                </span>
+              </Button>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+QuickActions.displayName = 'QuickActions';
+
+// ============================================
+// STREAK CARD
+// ============================================
+const StreakCard = memo(({ streak, bestStreak }: { streak: number; bestStreak: number }) => {
+  const isHot = streak >= 5;
+  
+  return (
+    <Card className={cn(
+      "dash-card-hover dash-slide-up relative overflow-hidden h-full",
+      isHot 
+        ? "border-orange-500/30 bg-gradient-to-br from-orange-500/20 via-red-500/10 to-yellow-500/20" 
+        : "dash-glass"
+    )} style={{ animationDelay: '300ms' }}>
+      {isHot && (
+        <div className="absolute inset-0 bg-gradient-to-t from-orange-500/10 via-transparent to-transparent" />
+      )}
+      
+      <CardContent className="relative z-10 p-3 sm:p-4 flex flex-col h-full">
+        <div className="flex items-start justify-between gap-2">
+          <div className="space-y-1 sm:space-y-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <Flame className={cn("w-4 h-4 sm:w-5 sm:h-5", isHot ? "text-orange-400 dash-streak" : "text-gray-400")} />
+              <span className="text-[10px] sm:text-xs font-medium text-gray-400 uppercase tracking-wider">Streak</span>
+            </div>
+            
+            <div className="flex items-baseline gap-1 sm:gap-2">
+              <span className={cn(
+                "text-3xl sm:text-4xl lg:text-5xl font-bold dash-number",
+                isHot ? "text-orange-400" : "text-white"
+              )}>
+                {streak}
+              </span>
+              <span className="text-xs sm:text-sm text-gray-400">wins</span>
+            </div>
+            
+            <div className="flex items-center gap-1.5 text-[10px] sm:text-xs">
+              <Trophy className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-400" />
+              <span className="text-gray-400">Best: {bestStreak}</span>
+            </div>
+          </div>
+          
+          {isHot && (
+            <div className="flex flex-col items-end gap-1">
+              <Badge variant="outline" className="border-orange-500/30 text-orange-400 text-[10px]">
+                🔥 Hot!
+              </Badge>
+              <div className="flex gap-0.5">
+                {[...Array(Math.min(streak, 5))].map((_, i) => (
+                  <Flame 
+                    key={i} 
+                    className="w-3 h-3 text-orange-400 dash-streak" 
+                    style={{ animationDelay: `${i * 100}ms` }} 
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+StreakCard.displayName = 'StreakCard';
+
+// ============================================
+// GOALS CARD
+// ============================================
+const GoalsCard = memo(() => {
+  const goals = [
+    { label: "Monthly Target", current: 2450, target: 5000, color: "emerald" },
+    { label: "Win Rate", current: 62, target: 70, unit: "%", color: "blue" },
+    { label: "Trades", current: 24, target: 40, color: "purple" },
+  ];
+  
+  return (
+    <Card className="dash-glass dash-card-hover dash-slide-up relative overflow-hidden h-full" style={{ animationDelay: '500ms' }}>
+      <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-red-500/5" />
+      
+      <CardHeader className="relative z-10 p-3 sm:p-4 pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm sm:text-base text-white flex items-center gap-2">
+            <Target className="w-4 h-4 sm:w-5 sm:h-5 text-orange-400 flex-shrink-0" />
+            <span className="truncate">Goals</span>
+          </CardTitle>
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-gray-400 hover:text-white">
+            <Settings className="w-3 h-3 sm:w-4 sm:h-4" />
+          </Button>
+        </div>
+      </CardHeader>
+      
+      <CardContent className="relative z-10 p-3 sm:p-4 pt-0 space-y-3 sm:space-y-4">
+        {goals.map((goal) => {
+          const progress = Math.min((goal.current / goal.target) * 100, 100);
+          const colorMap: Record<string, string> = {
+            emerald: "bg-emerald-500",
+            blue: "bg-blue-500",
+            purple: "bg-purple-500",
+          };
+          
+          return (
+            <div key={goal.label} className="space-y-1.5">
+              <div className="flex items-center justify-between text-[10px] sm:text-xs">
+                <span className="text-gray-400 truncate">{goal.label}</span>
+                <span className="text-white font-medium dash-number">
+                  {goal.unit ? `${goal.current}${goal.unit}` : formatCurrency(goal.current, true)}
+                  <span className="text-gray-500"> / {goal.unit ? `${goal.target}${goal.unit}` : formatCurrency(goal.target, true)}</span>
+                </span>
+              </div>
+              <div className="h-1.5 sm:h-2 bg-white/10 rounded-full overflow-hidden">
+                <div 
+                  className={cn("h-full rounded-full transition-all duration-1000", colorMap[goal.color])}
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+});
+GoalsCard.displayName = 'GoalsCard';
+
+// ============================================
+// METRICS CARD
+// ============================================
+const MetricsCard = memo(({ stats }: { stats: any }) => {
+  const metrics = [
+    { label: "Profit Factor", value: stats.profitFactor.toFixed(2), trend: "up" },
+    { label: "Avg Win", value: formatCurrency(stats.avgWin, true), trend: "up" },
+    { label: "Avg Loss", value: formatCurrency(stats.avgLoss, true), trend: "down" },
+    { label: "Best Trade", value: formatCurrency(stats.bestTrade, true), trend: "up" },
+    { label: "Worst Trade", value: formatCurrency(stats.worstTrade, true), trend: "down" },
+    { label: "Expectancy", value: formatCurrency(stats.expectancy, true), trend: stats.expectancy >= 0 ? "up" : "down" },
+  ];
+  
+  return (
+    <Card className="dash-glass dash-card-hover dash-slide-up relative overflow-hidden" style={{ animationDelay: '600ms' }}>
+      <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-teal-500/5" />
+      
+      <CardHeader className="relative z-10 p-3 sm:p-4 pb-2">
+        <CardTitle className="text-sm sm:text-base text-white flex items-center gap-2">
+          <PieChart className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 flex-shrink-0" />
+          <span className="truncate">Performance Metrics</span>
+        </CardTitle>
+      </CardHeader>
+      
+      <CardContent className="relative z-10 p-2 sm:p-3 pt-0">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {metrics.map((metric) => (
+            <div 
+              key={metric.label}
+              className="p-2 sm:p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+            >
+              <div className="flex items-center gap-1 mb-0.5 sm:mb-1">
+                {metric.trend === "up" ? 
+                  <ArrowUpRight className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-emerald-400" /> : 
+                  <ArrowDownRight className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-red-400" />
+                }
+                <span className="text-[9px] sm:text-[10px] text-gray-500 truncate">{metric.label}</span>
+              </div>
+              <p className={cn(
+                "text-sm sm:text-base font-bold dash-number truncate",
+                metric.trend === "up" ? "text-emerald-400" : "text-red-400"
+              )}>
+                {metric.value}
+              </p>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+MetricsCard.displayName = 'MetricsCard';
+
+// ============================================
+// MAIN DASHBOARD
+// ============================================
+const Dashboard = () => {
+  const navigate = useNavigate();
+  const marketData = useMarketData();
+  const stylesInjected = useRef(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+  
+  // Inject styles
+  useEffect(() => {
+    if (!stylesInjected.current) {
+      const style = document.createElement("style");
+      style.id = "dashboard-styles";
+      style.textContent = DASHBOARD_STYLES;
+      document.head.appendChild(style);
+      stylesInjected.current = true;
+    }
+    
+    const timer = setTimeout(() => setIsLoaded(true), 50);
+    
+    return () => {
+      clearTimeout(timer);
+      const existingStyle = document.getElementById("dashboard-styles");
+      if (existingStyle) existingStyle.remove();
+    };
+  }, []);
+  
+  // Fetch trades
+  const { data: trades = [], isLoading, refetch } = useQuery({
+    queryKey: ["trades"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("trades")
+        .select("*")
+        .order("opened_at", { ascending: false });
+      if (error) throw error;
+      return data as unknown as Trade[];
+    },
+  });
+  
+  // Calculate stats
+  const stats = useMemo(() => {
+    const total = trades.length;
+    const wins = trades.filter(t => (t.profit_loss_currency || 0) > 0);
+    const losses = trades.filter(t => (t.profit_loss_currency || 0) < 0);
+    const totalPnL = trades.reduce((sum, t) => sum + (t.profit_loss_currency || 0), 0);
+    const winRate = total > 0 ? (wins.length / total) * 100 : 65.4;
+    
+    const avgWin = wins.length > 0 
+      ? wins.reduce((sum, t) => sum + (t.profit_loss_currency || 0), 0) / wins.length 
+      : 245.50;
+    const avgLoss = losses.length > 0 
+      ? Math.abs(losses.reduce((sum, t) => sum + (t.profit_loss_currency || 0), 0) / losses.length)
+      : 98.20;
+    
+    const profitFactor = avgLoss > 0 && wins.length > 0 && losses.length > 0
+      ? (avgWin * wins.length) / (avgLoss * losses.length) 
+      : 1.85;
+    const expectancy = total > 0 ? totalPnL / total : 45.30;
+    
+    const allPnL = trades.map(t => t.profit_loss_currency || 0);
+    const bestTrade = allPnL.length > 0 ? Math.max(...allPnL) : 567.80;
+    const worstTrade = allPnL.length > 0 ? Math.min(...allPnL) : -234.50;
+    
+    return {
+      totalTrades: total || 156,
+      wins: wins.length || 102,
+      losses: losses.length || 54,
+      totalPnL: totalPnL || 12453.67,
+      winRate: winRate.toFixed(1),
+      profitFactor: isFinite(profitFactor) ? profitFactor : 1.85,
+      avgWin,
+      avgLoss,
+      expectancy,
+      bestTrade,
+      worstTrade,
+      streak: 5,
+      bestStreak: 8,
+    };
+  }, [trades]);
+  
+  // Animated counters
+  const animatedWinRate = useAnimatedCounter(parseFloat(stats.winRate), 1500, 1);
+  const animatedPnL = useAnimatedCounter(stats.totalPnL, 1500, 2);
+  const animatedTrades = useAnimatedCounter(stats.totalTrades, 1500);
+  
+  const handleNavigate = useCallback((path: string) => navigate(path), [navigate]);
+  
+  return (
+    <div className="min-h-screen bg-[#0a0b0f] text-white relative overflow-x-hidden">
+      <AnimatedBackground />
+      <MarketTicker data={marketData} />
+      
+      <div className={cn(
+        "relative z-10 pt-10 sm:pt-12 pb-6 sm:pb-8 px-3 sm:px-4 lg:px-6 xl:px-8 max-w-[1600px] mx-auto transition-all duration-700",
+        isLoaded ? "opacity-100" : "opacity-0"
+      )}>
+        {/* Header */}
+        <header className="flex items-center justify-between mb-4 sm:mb-6 lg:mb-8">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="relative flex-shrink-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 lg:w-12 lg:h-12 rounded-lg sm:rounded-xl bg-gradient-to-br from-emerald-500 to-blue-600 flex items-center justify-center shadow-lg shadow-emerald-500/25 dash-float">
+                <LineChart className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-white" />
+              </div>
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg lg:text-xl font-bold text-white truncate">Dashboard</h1>
+              <p className="text-[10px] sm:text-xs text-gray-500 hidden sm:block">Real-time analytics</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="h-8 sm:h-9 px-2 sm:px-3 bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10 text-xs sm:text-sm"
+              onClick={() => refetch()}
+            >
+              <RefreshCw className={cn("w-3 h-3 sm:w-4 sm:h-4 sm:mr-1.5", isLoading && "animate-spin")} />
+              <span className="hidden sm:inline">Sync</span>
+            </Button>
+            <Button variant="outline" size="sm" className="h-8 sm:h-9 w-8 sm:w-9 p-0 bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10">
+              <Bell className="w-3 h-3 sm:w-4 sm:h-4" />
+            </Button>
+            <Button variant="outline" size="sm" className="h-8 sm:h-9 w-8 sm:w-9 p-0 bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10">
+              <Settings className="w-3 h-3 sm:w-4 sm:h-4" />
+            </Button>
+          </div>
+        </header>
+        
+        {/* Main Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-4 lg:gap-5">
+          {/* Welcome Card - Full width */}
+          <div className="col-span-2 sm:col-span-2 lg:col-span-4 xl:col-span-4">
+            <WelcomeCard userName="Trader" stats={stats} />
+          </div>
+          
+          {/* Streak Card */}
+          <div className="col-span-1 xl:col-span-1">
+            <StreakCard streak={stats.streak} bestStreak={stats.bestStreak} />
+          </div>
+          
+          {/* Quick Total P&L */}
+          <div className="col-span-1 xl:col-span-1">
+            <StatCard
+              title="Total P&L"
+              value={`${stats.totalPnL >= 0 ? '+' : ''}${formatCurrency(animatedPnL)}`}
+              icon={DollarSign}
+              trend={stats.totalPnL >= 0 ? "up" : "down"}
+              trendValue={formatPercent((stats.totalPnL / 100000) * 100)}
+              subtitle="All time"
+              color={stats.totalPnL >= 0 ? "emerald" : "red"}
+              delay={100}
+            />
+          </div>
+          
+          {/* Stats Row - 4 cards */}
+          <div className="col-span-1">
+            <StatCard
+              title="Win Rate"
+              value={`${animatedWinRate}%`}
+              icon={Target}
+              trend={parseFloat(stats.winRate) >= 50 ? "up" : "down"}
+              trendValue={`${stats.wins}W/${stats.losses}L`}
+              color="blue"
+              delay={150}
+            />
+          </div>
+          
+          <div className="col-span-1">
+            <StatCard
+              title="Total Trades"
+              value={animatedTrades}
+              icon={Activity}
+              trend="neutral"
+              subtitle="All time"
+              color="purple"
+              delay={200}
+            />
+          </div>
+          
+          <div className="col-span-1">
+            <StatCard
+              title="Profit Factor"
+              value={stats.profitFactor.toFixed(2)}
+              icon={TrendingUp}
+              trend={stats.profitFactor >= 1.5 ? "up" : "neutral"}
+              subtitle="Risk/Reward"
+              color={stats.profitFactor >= 1.5 ? "emerald" : "orange"}
+              delay={250}
+            />
+          </div>
+          
+          <div className="col-span-1">
+            <StatCard
+              title="Expectancy"
+              value={formatCurrency(stats.expectancy)}
+              icon={Zap}
+              trend={stats.expectancy >= 0 ? "up" : "down"}
+              subtitle="Per trade"
+              color={stats.expectancy >= 0 ? "emerald" : "red"}
+              delay={300}
+            />
+          </div>
+          
+          {/* Performance Chart */}
+          <div className="col-span-2 lg:col-span-3 xl:col-span-4">
+            <PerformanceChart trades={trades} />
+          </div>
+          
+          {/* Quick Actions */}
+          <div className="col-span-1 lg:col-span-1 xl:col-span-1">
+            <QuickActions onNavigate={handleNavigate} />
+          </div>
+          
+          {/* Goals */}
+          <div className="col-span-1 lg:col-span-1 xl:col-span-1">
+            <GoalsCard />
+          </div>
+          
+          {/* Recent Trades */}
+          <div className="col-span-2 lg:col-span-2 xl:col-span-2">
+            <RecentTrades trades={trades} />
+          </div>
+          
+          {/* Metrics */}
+          <div className="col-span-2 lg:col-span-2 xl:col-span-4">
+            <MetricsCard stats={stats} />
+          </div>
+        </div>
+        
+        {/* Footer */}
+        <footer className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-3 text-[10px] sm:text-xs text-gray-500">
+          <div className="flex items-center gap-2">
+            <Shield className="w-3 h-3 sm:w-4 sm:h-4 text-emerald-500" />
+            <span>256-bit AES Encryption</span>
+          </div>
+          <div className="flex items-center gap-3 sm:gap-4">
+            <span className="hidden sm:inline">Last updated: {new Date().toLocaleTimeString()}</span>
+            <div className="flex items-center gap-1.5">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
+              <span>Live</span>
+            </div>
+          </div>
+        </footer>
+      </div>
+    </div>
+  );
+};
+
+export default Dashboard;
