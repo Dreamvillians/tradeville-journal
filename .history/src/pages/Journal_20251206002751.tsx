@@ -92,13 +92,13 @@ const JOURNAL_STYLES = `
     border-radius: 4px;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.8); /* White thumb as requested */
     border-radius: 4px;
     border: 2px solid transparent;
     background-clip: content-box;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: rgba(52, 211, 153, 0.5);
+    background: rgba(255, 255, 255, 1); /* Brighter white on hover */
   }
 
   /* Smooth horizontal scrolling */

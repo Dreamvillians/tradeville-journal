@@ -59,12 +59,12 @@ const JOURNAL_STYLES = `
     background-color: rgba(255, 255, 255, 0.03);
   }
 
-  /* STICKY COLUMN LOGIC - Ensures content slides UNDER this column */
+  /* STICKY COLUMN LOGIC */
   .sticky-col {
     position: sticky;
     left: 0;
     z-index: 20;
-    background-color: #0a0b0f; /* MUST be solid color matching bg to hide scrolling content */
+    background-color: #0a0b0f; /* Match page bg to hide content scrolling under */
     border-right: 1px solid rgba(255,255,255,0.05);
     transition: background-color 0.2s ease;
   }
@@ -76,13 +76,13 @@ const JOURNAL_STYLES = `
 
   /* When hovering the row, change the sticky column bg to match */
   .journal-row:hover .sticky-col {
-    background-color: #13141c; 
+    background-color: #13141c; /* Approximation of the row hover color */
   }
 
   .animate-enter { animation: enter 0.5s ease-out forwards; opacity: 0; transform: translateY(10px); }
   @keyframes enter { to { opacity: 1; transform: translateY(0); } }
   
-  /* Custom Scrollbar - Styled to match theme */
+  /* Custom Scrollbar */
   .custom-scrollbar::-webkit-scrollbar {
     height: 10px;
     width: 10px;
@@ -382,13 +382,12 @@ const Journal = () => {
   }, [filteredTrades.length]);
 
   return (
-    // CRITICAL: min-w-0 allows this container to shrink to fit the remaining space
-    // next to the sidebar, instead of trying to be 100vw.
-    <div className="flex-1 w-full min-w-0 bg-[#0a0b0f] text-white relative font-sans selection:bg-emerald-500/30">
+    // w-full + overflow-hidden on the outer wrapper ensures this component 
+    // stays inside the main content area and doesn't bleed into the sidebar.
+    <div className="w-full h-full max-w-full overflow-hidden bg-[#0a0b0f] text-white relative font-sans selection:bg-emerald-500/30">
       <FloatingOrbs />
 
-      <div className="relative z-10 w-full flex flex-col px-3 sm:px-6 lg:px-8 py-4 sm:py-8 animate-enter">
-        
+      <div className="relative z-10 w-full h-full flex flex-col px-3 sm:px-6 lg:px-8 py-4 sm:py-8 animate-enter">
         {/* Header & Actions */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6 sm:mb-8 flex-shrink-0">
           <div className="min-w-0 flex-1">
@@ -491,21 +490,21 @@ const Journal = () => {
           </div>
         )}
 
-        {/* Main Table Container - The min-w-0 ensures it respects the flex parent */}
-        <Card className="journal-glass border-none overflow-hidden w-full min-w-0 flex flex-col flex-1">
-          <CardContent className="p-0 w-full h-full flex flex-col relative">
+        {/* Main Table Container - using min-w-0 to prevent flex blowout */}
+        <Card className="journal-glass border-none overflow-hidden w-full min-w-0 flex-1 flex flex-col">
+          <CardContent className="p-0 w-full h-full flex flex-col">
             {loading ? (
-              <div className="flex justify-center py-20 flex-1">
+              <div className="flex justify-center py-20">
                 <div className="animate-spin h-6 w-6 border-2 border-emerald-500 border-t-transparent rounded-full" />
               </div>
             ) : filteredTrades.length === 0 ? (
-              <div className="text-center py-20 text-gray-500 flex-1">
+              <div className="text-center py-20 text-gray-500">
                 No trades found
               </div>
             ) : (
               <>
                 {/* Mobile List */}
-                <div className="block lg:hidden p-3 space-y-3 overflow-y-auto flex-1">
+                <div className="block lg:hidden p-3 space-y-3 overflow-y-auto">
                   {filteredTrades.map((trade) => (
                     <MobileTradeCard
                       key={trade.id}
@@ -516,19 +515,18 @@ const Journal = () => {
                 </div>
 
                 {/* Desktop Table */}
-                {/* overflow-x-auto is APPLIED HERE. This forces the scrollbar to be on THIS div, not the window. */}
-                <div className="hidden lg:block w-full h-full relative">
+                <div className="hidden lg:block relative w-full h-full">
                   <div
                     ref={tableScrollRef}
-                    className="journal-scroll-area overflow-x-auto custom-scrollbar w-full h-full pb-3"
+                    className="journal-scroll-area overflow-x-auto custom-scrollbar w-full pb-2"
                     onScroll={updateScrollButtons}
                   >
-                    <Table className="min-w-[1400px]">
+                    <Table className="min-w-[1200px]">
                       <TableHeader className="bg-white/[0.02] border-b border-white/5 sticky top-0 z-30 backdrop-blur-sm">
                         <TableRow className="hover:bg-transparent border-none">
                           
                           {/* STICKY INSTRUMENT COLUMN HEADER */}
-                          <TableHead className="h-10 text-[10px] font-bold text-gray-500 uppercase tracking-wider pl-6 sticky-col sticky-header min-w-[120px]">
+                          <TableHead className="h-10 text-[10px] font-bold text-gray-500 uppercase tracking-wider pl-6 sticky-col sticky-header">
                             Instrument
                           </TableHead>
                           
@@ -559,7 +557,7 @@ const Journal = () => {
                           <TableHead className="h-10 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-right">
                             P&L
                           </TableHead>
-                          <TableHead className="h-10 text-[10px] font-bold text-gray-500 uppercase tracking-wider pl-4">
+                          <TableHead className="h-10 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                             Setup
                           </TableHead>
                           <TableHead className="h-10 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-center">
@@ -688,7 +686,7 @@ const Journal = () => {
 
                               {/* 11. Setup */}
                               <TableCell
-                                className="text-gray-400 truncate max-w-[120px] pl-4"
+                                className="text-gray-400 truncate max-w-[100px]"
                                 title={trade.setup_type || ""}
                               >
                                 {trade.setup_type || "-"}
@@ -747,7 +745,7 @@ const Journal = () => {
                     <button
                       type="button"
                       onClick={() => scrollHorizontally("left")}
-                      className="absolute left-24 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/80 border border-white/15 flex items-center justify-center hover:bg-emerald-500/20 hover:border-emerald-500 transition-all z-40"
+                      className="absolute left-20 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/80 border border-white/15 flex items-center justify-center hover:bg-emerald-500/20 hover:border-emerald-500 transition-all z-40"
                     >
                       <ChevronLeft className="w-4 h-4 text-gray-200" />
                     </button>

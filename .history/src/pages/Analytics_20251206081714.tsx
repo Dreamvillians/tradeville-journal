@@ -127,8 +127,6 @@ interface Trade {
 interface Metrics {
   totalTrades: number;
   profitableTrades: number;
-  losingTrades: number;
-  breakEvenTrades: number;
   nonProfitableTrades: number;
   winRate: number;        // %
   profitFactor: number;   // Infinity for "∞"
@@ -673,23 +671,26 @@ const StrategyPerformance = memo(function StrategyPerformance({
         stats[strategyName] = { trades: 0, wins: 0, losses: 0, pnl: 0 };
       }
       const pnl = trade.profit_loss_currency || 0;
+      
       stats[strategyName].trades++;
+      stats[strategyName].pnl += pnl;
+
       if (pnl > 0) stats[strategyName].wins++;
       if (pnl < 0) stats[strategyName].losses++;
-      stats[strategyName].pnl += pnl;
     });
 
     return Object.entries(stats)
       .map(([name, data]) => {
-        // Win rate excluding break-even trades
-        const decisiveTrades = data.wins + data.losses;
+        // Win rate calc excluding break-even
+        const validTrades = data.wins + data.losses;
+        const winRate = validTrades > 0 
+          ? (data.wins / validTrades) * 100 
+          : 0;
+
         return {
           name,
           ...data,
-          winRate:
-            decisiveTrades > 0
-              ? (data.wins / decisiveTrades) * 100
-              : 0,
+          winRate,
         };
       })
       .sort((a, b) => b.pnl - a.pnl);
@@ -769,12 +770,10 @@ const PerformanceSummary = memo(function PerformanceSummary({
   metrics: Metrics;
   periodLabel: string;
 }) {
-  // Calculate success rate excluding break-even trades
-  const decisiveTrades = metrics.profitableTrades + metrics.losingTrades;
-  const successRate =
-    decisiveTrades > 0
-      ? (metrics.profitableTrades / decisiveTrades) * 100
-      : 0;
+  
+  // Note: This local calculation uses totalTrades for distribution visualization
+  // The actual Win Rate passed in metrics is already adjusted to exclude BE.
+  const successRate = metrics.winRate;
 
   const isAllTime = /all time/i.test(periodLabel);
 
@@ -819,7 +818,7 @@ const PerformanceSummary = memo(function PerformanceSummary({
                     {metrics.winRate.toFixed(1)}%
                   </span>
                   <span className="text-[10px] text-gray-500 mb-1">
-                    ({decisiveTrades} decisive)
+                    (Excl. B/E)
                   </span>
                 </div>
               </div>
@@ -868,10 +867,10 @@ const PerformanceSummary = memo(function PerformanceSummary({
                   className="h-full bg-emerald-500 transition-all duration-1000"
                   style={{
                     width:
-                      decisiveTrades > 0
+                      metrics.totalTrades > 0
                         ? `${
                             (metrics.profitableTrades /
-                              decisiveTrades) *
+                              metrics.totalTrades) *
                             100
                           }%`
                         : "0%",
@@ -881,10 +880,10 @@ const PerformanceSummary = memo(function PerformanceSummary({
                   className="h-full bg-red-500 transition-all duration-1000"
                   style={{
                     width:
-                      decisiveTrades > 0
+                      metrics.totalTrades > 0
                         ? `${
-                            (metrics.losingTrades /
-                              decisiveTrades) *
+                            (metrics.nonProfitableTrades /
+                              metrics.totalTrades) *
                             100
                           }%`
                         : "0%",
@@ -893,7 +892,7 @@ const PerformanceSummary = memo(function PerformanceSummary({
               </div>
               <div className="flex justify-between text-[10px] text-gray-500">
                 <span>{metrics.profitableTrades}</span>
-                <span>{metrics.losingTrades}</span>
+                <span>{metrics.nonProfitableTrades}</span>
               </div>
             </div>
           </div>
@@ -920,9 +919,6 @@ const PerformanceSummary = memo(function PerformanceSummary({
             </p>
             <p className="text-3xl font-semibold text-white">
               {metrics.winRate.toFixed(1)}%
-            </p>
-            <p className="text-[10px] text-gray-500 mt-1">
-              Excludes {metrics.breakEvenTrades} break-even
             </p>
           </div>
           <div className="p-4 rounded-xl bg-white/5">
@@ -960,22 +956,11 @@ const PerformanceSummary = memo(function PerformanceSummary({
               className="bg-red-500/20 border border-red-500/30 h-10 rounded-lg flex-1 flex items-center justify-center text-xs font-medium text-red-400 hover:bg-red-500/25 transition-colors"
               style={{
                 flexGrow:
-                  metrics.losingTrades || 1,
+                  metrics.nonProfitableTrades || 1,
               }}
             >
-              Losses: {metrics.losingTrades}
+              Losses: {metrics.nonProfitableTrades}
             </div>
-            {metrics.breakEvenTrades > 0 && (
-              <div
-                className="bg-gray-500/20 border border-gray-500/30 h-10 rounded-lg flex-1 flex items-center justify-center text-xs font-medium text-gray-400 hover:bg-gray-500/25 transition-colors"
-                style={{
-                  flexGrow:
-                    metrics.breakEvenTrades || 1,
-                }}
-              >
-                BE: {metrics.breakEvenTrades}
-              </div>
-            )}
           </div>
 
           <p className="mt-3 text-[11px] text-gray-500">
@@ -983,9 +968,6 @@ const PerformanceSummary = memo(function PerformanceSummary({
             <span className="font-semibold text-gray-200">
               {successRate.toFixed(1)}%
             </span>
-            {metrics.breakEvenTrades > 0 && (
-              <span className="text-gray-600"> (excl. break-even)</span>
-            )}
           </p>
         </div>
       </CardContent>
@@ -1048,12 +1030,12 @@ const AnalyticsContent = memo(function AnalyticsContent({
       subtitle: "Closed in profit",
     },
     {
-      title: "Losing Trades",
-      value: metrics.losingTrades,
+      title: "Non‑Profitable",
+      value: metrics.nonProfitableTrades,
       icon: TrendingDown,
       trend: "down",
       color: "red",
-      subtitle: `Closed at loss (${metrics.breakEvenTrades} BE)`,
+      subtitle: "Closed at loss / breakeven",
     },
     {
       title: "Win Rate",
@@ -1061,7 +1043,7 @@ const AnalyticsContent = memo(function AnalyticsContent({
       icon: Target,
       trend: metrics.winRate >= 50 ? "up" : "down",
       color: "blue",
-      subtitle: "Wins / (Wins + Losses)",
+      subtitle: "Excl. Break Even",
     },
     {
       title: "Profit Factor",
@@ -1247,23 +1229,17 @@ const AnalyticsContent = memo(function AnalyticsContent({
 const calculateMetrics = (filteredTrades: Trade[]): Metrics => {
   const totalTrades = filteredTrades.length;
 
-  // Profitable trades (P&L > 0)
   const profitableTrades = filteredTrades.filter(
     (t) => (t.profit_loss_currency || 0) > 0
   ).length;
 
-  // Losing trades (P&L < 0) - excludes break-even
-  const losingTrades = filteredTrades.filter(
+  const strictlyLossTrades = filteredTrades.filter(
     (t) => (t.profit_loss_currency || 0) < 0
   ).length;
 
-  // Break-even trades (P&L === 0)
-  const breakEvenTrades = filteredTrades.filter(
-    (t) => (t.profit_loss_currency || 0) === 0
+  const nonProfitableTrades = filteredTrades.filter(
+    (t) => (t.profit_loss_currency || 0) <= 0
   ).length;
-
-  // Non-profitable includes both losses and break-even (for backward compatibility)
-  const nonProfitableTrades = losingTrades + breakEvenTrades;
 
   const totalProfit = filteredTrades
     .filter((t) => (t.profit_loss_currency || 0) > 0)
@@ -1286,12 +1262,11 @@ const calculateMetrics = (filteredTrades: Trade[]): Metrics => {
     0
   );
 
-  // Win rate calculation: EXCLUDES break-even trades
-  // Only consider trades with a definitive outcome (win or loss)
-  const decisiveTrades = profitableTrades + losingTrades;
+  const tradesForWinRate = profitableTrades + strictlyLossTrades;
+
   const winRate =
-    decisiveTrades > 0
-      ? (profitableTrades / decisiveTrades) * 100
+    tradesForWinRate > 0
+      ? (profitableTrades / tradesForWinRate) * 100
       : 0;
 
   const profitFactor =
@@ -1306,10 +1281,9 @@ const calculateMetrics = (filteredTrades: Trade[]): Metrics => {
       ? totalProfit / profitableTrades
       : 0;
 
-  // Average loss uses only losing trades (excludes break-even)
   const avgLoss =
-    losingTrades > 0
-      ? totalLossAbs / losingTrades
+    nonProfitableTrades > 0
+      ? totalLossAbs / nonProfitableTrades
       : 0;
 
   const expectedValue =
@@ -1340,8 +1314,6 @@ const calculateMetrics = (filteredTrades: Trade[]): Metrics => {
   return {
     totalTrades,
     profitableTrades,
-    losingTrades,
-    breakEvenTrades,
     nonProfitableTrades,
     winRate,
     profitFactor,

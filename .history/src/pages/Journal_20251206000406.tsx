@@ -492,20 +492,20 @@ const Journal = () => {
         )}
 
         {/* Main Table Container - The min-w-0 ensures it respects the flex parent */}
-        <Card className="journal-glass border-none overflow-hidden w-full min-w-0 flex flex-col flex-1">
-          <CardContent className="p-0 w-full h-full flex flex-col relative">
+        <Card className="journal-glass border-none overflow-hidden w-full min-w-0 flex flex-col">
+          <CardContent className="p-0 w-full relative">
             {loading ? (
-              <div className="flex justify-center py-20 flex-1">
+              <div className="flex justify-center py-20">
                 <div className="animate-spin h-6 w-6 border-2 border-emerald-500 border-t-transparent rounded-full" />
               </div>
             ) : filteredTrades.length === 0 ? (
-              <div className="text-center py-20 text-gray-500 flex-1">
+              <div className="text-center py-20 text-gray-500">
                 No trades found
               </div>
             ) : (
               <>
                 {/* Mobile List */}
-                <div className="block lg:hidden p-3 space-y-3 overflow-y-auto flex-1">
+                <div className="block lg:hidden p-3 space-y-3 overflow-y-auto">
                   {filteredTrades.map((trade) => (
                     <MobileTradeCard
                       key={trade.id}
@@ -517,10 +517,10 @@ const Journal = () => {
 
                 {/* Desktop Table */}
                 {/* overflow-x-auto is APPLIED HERE. This forces the scrollbar to be on THIS div, not the window. */}
-                <div className="hidden lg:block w-full h-full relative">
+                <div className="hidden lg:block w-full">
                   <div
                     ref={tableScrollRef}
-                    className="journal-scroll-area overflow-x-auto custom-scrollbar w-full h-full pb-3"
+                    className="journal-scroll-area overflow-x-auto custom-scrollbar w-full pb-3"
                     onScroll={updateScrollButtons}
                   >
                     <Table className="min-w-[1400px]">

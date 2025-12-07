@@ -1,0 +1,1769 @@
+import { useState, useEffect, useMemo, useCallback, memo, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Target,
+  TrendingUp,
+  TrendingDown,
+  Flame,
+  BookOpen,
+  PlusCircle,
+  BarChart3,
+  Activity,
+  Zap,
+  Calendar,
+  DollarSign,
+  ArrowUpRight,
+  ArrowDownRight,
+  ChevronRight,
+  Bell,
+  Settings,
+  RefreshCw,
+  LineChart,
+  PieChart,
+  Shield,
+  Award,
+  Sparkles,
+  AlertCircle,
+  CandlestickChart,
+  Clock,
+  Moon,
+  Sun,
+  Sunrise,
+  Sunset
+} from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
+import { cn } from "@/lib/utils";
+
+// Dashboard Styles
+const DASHBOARD_STYLES = `
+  .dash-float { animation: dash-float 6s ease-in-out infinite; }
+  .dash-float-delayed { animation: dash-float 6s ease-in-out infinite; animation-delay: 2s; }
+  .dash-pulse { animation: dash-pulse 3s ease-in-out infinite; }
+  .dash-glow { animation: dash-glow 2s ease-in-out infinite; }
+  .dash-shimmer { animation: dash-shimmer 3s ease-in-out infinite; background-size: 200% 100%; }
+  .dash-slide-up { animation: dash-slide-up 0.5s ease-out forwards; }
+  .dash-slide-right { animation: dash-slide-right 0.5s ease-out forwards; }
+  .dash-fade-in { animation: dash-fade-in 0.6s ease-out forwards; }
+  .dash-scale-in { animation: dash-scale-in 0.4s ease-out forwards; }
+  .dash-bounce { animation: dash-bounce 1s ease-in-out infinite; }
+  .dash-rotate { animation: dash-rotate 20s linear infinite; }
+  .dash-progress { animation: dash-progress 2s ease-out forwards; }
+  .dash-count { animation: dash-count 1.5s ease-out forwards; }
+  .dash-ripple { animation: dash-ripple 1.5s ease-out infinite; }
+  .dash-wave { animation: dash-wave 2s ease-in-out infinite; }
+  
+  @keyframes dash-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+  @keyframes dash-pulse { 0%, 100% { opacity: 0.5; transform: scale(1); } 50% { opacity: 0.8; transform: scale(1.05); } }
+  @keyframes dash-glow { 0%, 100% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.3); } 50% { box-shadow: 0 0 40px rgba(16, 185, 129, 0.6); } }
+  @keyframes dash-shimmer { 0%, 100% { background-position: -200% 0; } 50% { background-position: 200% 0; } }
+  @keyframes dash-slide-up { 0% { transform: translateY(20px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+  @keyframes dash-slide-right { 0% { transform: translateX(-20px); opacity: 0; } 100% { transform: translateX(0); opacity: 1; } }
+  @keyframes dash-fade-in { 0% { opacity: 0; } 100% { opacity: 1; } }
+  @keyframes dash-scale-in { 0% { transform: scale(0.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+  @keyframes dash-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+  @keyframes dash-rotate { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  @keyframes dash-progress { 0% { width: 0%; } }
+  @keyframes dash-count { 0% { opacity: 0; transform: scale(0.5); } 100% { opacity: 1; transform: scale(1); } }
+  @keyframes dash-ripple { 0% { transform: scale(1); opacity: 0.5; } 100% { transform: scale(1.5); opacity: 0; } }
+  @keyframes dash-wave { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(1.2); } }
+  
+  .dash-gradient-border {
+    position: relative;
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(59, 130, 246, 0.1));
+  }
+  .dash-gradient-border::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    padding: 1px;
+    border-radius: inherit;
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.5), rgba(59, 130, 246, 0.5));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+  
+  .dash-glass {
+    background: rgba(18, 19, 26, 0.8);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  .dash-card-hover {
+    transition: all 0.3s ease;
+  }
+  .dash-card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    border-color: rgba(16, 185, 129, 0.3);
+  }
+  
+  .dash-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+  .dash-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); border-radius: 3px; }
+  .dash-scrollbar::-webkit-scrollbar-thumb { background: rgba(16, 185, 129, 0.3); border-radius: 3px; }
+  .dash-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(16, 185, 129, 0.5); }
+  
+  .hide-scrollbar::-webkit-scrollbar { display: none; }
+  .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  
+  @media (prefers-reduced-motion: reduce) {
+    .dash-float, .dash-pulse, .dash-glow, .dash-shimmer, .dash-bounce,
+    .dash-rotate, .dash-ripple, .dash-wave { animation: none !important; }
+  }
+`;
+
+// Types
+interface Trade {
+  id: string;
+  symbol: string;
+  side: "long" | "short";
+  profit_loss_currency: number;
+  profit_loss_percent: number;
+  opened_at: string;
+  closed_at: string;
+  strategy?: string;
+  notes?: string;
+}
+
+interface UserProfile {
+  id: string;
+  full_name?: string;
+  username?: string;
+  email?: string;
+  monthly_pnl_goal?: number;
+  monthly_trades_goal?: number;
+  win_rate_goal?: number;
+  starting_balance?: number;
+}
+
+interface DashboardStats {
+  totalTrades: number;
+  wins: number;
+  losses: number;
+  breakEven: number;
+  decisiveTrades: number;
+  totalPnL: number;
+  winRate: string;
+  profitFactor: number;
+  avgWin: number;
+  avgLoss: number;
+  expectancy: number;
+  bestTrade: number;
+  worstTrade: number;
+  streak: number;
+  streakType: "win" | "loss" | "none";
+  monthlyPnL: number;
+  monthlyTrades: number;
+  maxDrawdown: number;
+  totalReturn: number;
+  sharpeRatio: number;
+}
+
+interface ChartDataPoint {
+  date: string;
+  value: number;
+  pnl: number;
+  isProfit: boolean;
+  tradeCount: number;
+}
+
+// Utility functions
+const formatCurrency = (value: number): string => {
+  const absValue = Math.abs(value);
+  if (absValue >= 1000000) return `$${(value / 1000000).toFixed(2)}M`;
+  if (absValue >= 1000) return `$${(value / 1000).toFixed(1)}K`;
+  return `$${value.toFixed(2)}`;
+};
+
+const formatPercent = (value: number): string =>
+  `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
+
+const getTimeAgo = (date: string): string => {
+  const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+  if (seconds < 60) return "Just now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+};
+
+// Market status checker
+const getMarketStatus = (): { isOpen: boolean; status: string; icon: typeof Clock } => {
+  const now = new Date();
+  const utcHours = now.getUTCHours();
+  const utcDay = now.getUTCDay();
+  
+  // Weekend check
+  if (utcDay === 0 || utcDay === 6) {
+    return { isOpen: false, status: "Weekend", icon: Moon };
+  }
+  
+  // US Market hours (9:30 AM - 4:00 PM ET = 14:30 - 21:00 UTC)
+  if (utcHours >= 14 && utcHours < 21) {
+    return { isOpen: true, status: "US Market Open", icon: Sun };
+  }
+  
+  // Pre-market (4:00 AM - 9:30 AM ET = 9:00 - 14:30 UTC)
+  if (utcHours >= 9 && utcHours < 14) {
+    return { isOpen: true, status: "Pre-Market", icon: Sunrise };
+  }
+  
+  // After-hours (4:00 PM - 8:00 PM ET = 21:00 - 1:00 UTC)
+  if (utcHours >= 21 || utcHours < 1) {
+    return { isOpen: true, status: "After Hours", icon: Sunset };
+  }
+  
+  return { isOpen: false, status: "Market Closed", icon: Moon };
+};
+
+// Calculate streak from trades
+const calculateStreak = (trades: Trade[]): { streak: number; type: "win" | "loss" | "none" } => {
+  if (trades.length === 0) return { streak: 0, type: "none" };
+  
+  const sortedTrades = [...trades].sort(
+    (a, b) => new Date(b.closed_at).getTime() - new Date(a.closed_at).getTime()
+  );
+  
+  let streak = 0;
+  const firstTradeIsWin = (sortedTrades[0]?.profit_loss_currency || 0) > 0;
+  
+  for (const trade of sortedTrades) {
+    const isWin = (trade.profit_loss_currency || 0) > 0;
+    const isLoss = (trade.profit_loss_currency || 0) < 0;
+    
+    if (streak === 0) {
+      if (isWin) {
+        streak = 1;
+      } else if (isLoss) {
+        streak = 1;
+      }
+    } else if (firstTradeIsWin && isWin) {
+      streak++;
+    } else if (!firstTradeIsWin && isLoss) {
+      streak++;
+    } else {
+      break;
+    }
+  }
+  
+  return {
+    streak,
+    type: streak === 0 ? "none" : firstTradeIsWin ? "win" : "loss"
+  };
+};
+
+// Calculate equity curve data from trades
+const calculateEquityCurve = (
+  trades: Trade[],
+  startingBalance: number,
+  timeframe: "1W" | "1M" | "3M" | "YTD" | "ALL"
+): ChartDataPoint[] => {
+  const now = new Date();
+  let startDate: Date;
+  
+  switch (timeframe) {
+    case "1W":
+      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      break;
+    case "1M":
+      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      break;
+    case "3M":
+      startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+      break;
+    case "YTD":
+      startDate = new Date(now.getFullYear(), 0, 1);
+      break;
+    case "ALL":
+    default:
+      startDate = trades.length > 0 
+        ? new Date(Math.min(...trades.map(t => new Date(t.closed_at).getTime())))
+        : new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+      break;
+  }
+  
+  // Filter trades within timeframe
+  const filteredTrades = trades.filter(t => new Date(t.closed_at) >= startDate);
+  
+  // Group trades by date
+  const tradesByDate: { [key: string]: Trade[] } = {};
+  filteredTrades.forEach(trade => {
+    const dateKey = new Date(trade.closed_at).toISOString().split('T')[0];
+    if (!tradesByDate[dateKey]) {
+      tradesByDate[dateKey] = [];
+    }
+    tradesByDate[dateKey].push(trade);
+  });
+  
+  // Generate data points
+  const dataPoints: ChartDataPoint[] = [];
+  let cumulative = startingBalance;
+  
+  // Calculate cumulative P&L before start date for accurate starting point
+  const tradesBeforeStart = trades.filter(t => new Date(t.closed_at) < startDate);
+  tradesBeforeStart.forEach(t => {
+    cumulative += t.profit_loss_currency || 0;
+  });
+  
+  const daysDiff = Math.ceil((now.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000));
+  
+  for (let i = 0; i <= daysDiff; i++) {
+    const date = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
+    const dateKey = date.toISOString().split('T')[0];
+    const dayTrades = tradesByDate[dateKey] || [];
+    
+    const dailyPnL = dayTrades.reduce((sum, t) => sum + (t.profit_loss_currency || 0), 0);
+    cumulative += dailyPnL;
+    
+    dataPoints.push({
+      date: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      value: cumulative,
+      pnl: dailyPnL,
+      isProfit: dailyPnL >= 0,
+      tradeCount: dayTrades.length
+    });
+  }
+  
+  return dataPoints;
+};
+
+// Calculate max drawdown
+const calculateMaxDrawdown = (equityCurve: ChartDataPoint[]): number => {
+  if (equityCurve.length === 0) return 0;
+  
+  let peak = equityCurve[0].value;
+  let maxDrawdown = 0;
+  
+  for (const point of equityCurve) {
+    if (point.value > peak) {
+      peak = point.value;
+    }
+    const drawdown = ((peak - point.value) / peak) * 100;
+    if (drawdown > maxDrawdown) {
+      maxDrawdown = drawdown;
+    }
+  }
+  
+  return maxDrawdown;
+};
+
+// Calculate Sharpe Ratio (simplified)
+const calculateSharpeRatio = (trades: Trade[]): number => {
+  if (trades.length < 2) return 0;
+  
+  const returns = trades.map(t => t.profit_loss_percent || 0);
+  const avgReturn = returns.reduce((a, b) => a + b, 0) / returns.length;
+  
+  const variance = returns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / returns.length;
+  const stdDev = Math.sqrt(variance);
+  
+  if (stdDev === 0) return 0;
+  
+  // Annualized Sharpe (assuming 252 trading days)
+  const sharpe = (avgReturn / stdDev) * Math.sqrt(252);
+  
+  return isFinite(sharpe) ? sharpe : 0;
+};
+
+// Custom hooks
+const useAnimatedCounter = (
+  end: number,
+  duration: number = 1500,
+  decimals: number = 0
+) => {
+  const [count, setCount] = useState(0);
+  const countRef = useRef(0);
+
+  useEffect(() => {
+    const start = countRef.current;
+    const startTime = Date.now();
+
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const easeOut = 1 - Math.pow(1 - progress, 3);
+      const current = start + (end - start) * easeOut;
+
+      setCount(Number(current.toFixed(decimals)));
+      countRef.current = current;
+
+      if (progress < 1) requestAnimationFrame(animate);
+    };
+
+    requestAnimationFrame(animate);
+  }, [end, duration, decimals]);
+
+  return count;
+};
+
+// Background Components
+const FloatingOrbs = memo(() => (
+  <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+    <div className="absolute -top-20 -left-20 w-48 sm:w-80 h-48 sm:h-80 bg-emerald-500/10 rounded-full blur-[80px] sm:blur-[100px] dash-float" />
+    <div className="absolute -bottom-20 -right-20 w-56 sm:w-96 h-56 sm:h-96 bg-blue-500/10 rounded-full blur-[100px] sm:blur-[120px] dash-float-delayed" />
+    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-purple-500/5 rounded-full blur-[100px] sm:blur-[150px] dash-pulse" />
+  </div>
+));
+FloatingOrbs.displayName = "FloatingOrbs";
+
+const AnimatedGrid = memo(() => (
+  <div className="fixed inset-0 overflow-hidden pointer-events-none z-0 opacity-30">
+    <div className="absolute inset-0 bg-[linear-gradient(to_right,#10b98108_1px,transparent_1px),linear-gradient(to_bottom,#10b98108_1px,transparent_1px)] bg-[size:30px_30px] sm:bg-[size:50px_50px]" />
+  </div>
+));
+AnimatedGrid.displayName = "AnimatedGrid";
+
+// Stat Card
+const StatCard = memo(
+  ({
+    title,
+    value,
+    subtitle,
+    icon: Icon,
+    trend,
+    trendValue,
+    color = "emerald",
+    delay = 0,
+    size = "default",
+  }: {
+    title: string;
+    value: string | number;
+    subtitle?: string;
+    icon: typeof Target;
+    trend?: "up" | "down" | "neutral";
+    trendValue?: string;
+    color?: "emerald" | "blue" | "purple" | "orange" | "red";
+    delay?: number;
+    size?: "default" | "large";
+  }) => {
+    const colorClasses = {
+      emerald: {
+        bg: "from-emerald-500/20 to-emerald-600/10",
+        text: "text-emerald-400",
+        glow: "shadow-emerald-500/20",
+      },
+      blue: {
+        bg: "from-blue-500/20 to-blue-600/10",
+        text: "text-blue-400",
+        glow: "shadow-blue-500/20",
+      },
+      purple: {
+        bg: "from-purple-500/20 to-purple-600/10",
+        text: "text-purple-400",
+        glow: "shadow-purple-500/20",
+      },
+      orange: {
+        bg: "from-orange-500/20 to-orange-600/10",
+        text: "text-orange-400",
+        glow: "shadow-orange-500/20",
+      },
+      red: {
+        bg: "from-red-500/20 to-red-600/10",
+        text: "text-red-400",
+        glow: "shadow-red-500/20",
+      },
+    };
+
+    const colors = colorClasses[color];
+
+    return (
+      <Card
+        className={cn(
+          "dash-glass dash-card-hover relative overflow-hidden group h-full",
+          size === "large" && "p-1 sm:p-2"
+        )}
+        style={{ animationDelay: `${delay}ms` }}
+      >
+        <div
+          className={cn(
+            "absolute inset-0 bg-gradient-to-br opacity-50 group-hover:opacity-70 transition-opacity",
+            colors.bg
+          )}
+        />
+        <div className="absolute top-0 right-0 w-16 sm:w-20 h-16 sm:h-20 opacity-20">
+          <div
+            className={cn(
+              "absolute top-0 right-0 w-full h-full bg-gradient-to-bl rounded-bl-full",
+              colors.bg
+            )}
+          />
+        </div>
+
+        <CardContent
+          className={cn("relative z-10", size === "large" ? "p-4 sm:p-6" : "p-3 sm:p-4")}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="space-y-1 sm:space-y-2 min-w-0 flex-1">
+              <p className="text-[10px] sm:text-xs uppercase tracking-wider text-gray-400 font-semibold truncate">
+                {title}
+              </p>
+              <p
+                className={cn(
+                  "font-bold tabular-nums dash-count truncate",
+                  size === "large" ? "text-xl sm:text-3xl" : "text-lg sm:text-2xl",
+                  typeof value === "string" && value.startsWith("-")
+                    ? "text-red-400"
+                    : "text-white"
+                )}
+              >
+                {value}
+              </p>
+              {subtitle && (
+                <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
+                  {trend && (
+                    <span
+                      className={cn(
+                        "flex items-center gap-0.5 sm:gap-1 text-[10px] sm:text-xs font-semibold",
+                        trend === "up"
+                          ? "text-emerald-400"
+                          : trend === "down"
+                          ? "text-red-400"
+                          : "text-gray-400"
+                      )}
+                    >
+                      {trend === "up" ? (
+                        <ArrowUpRight className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                      ) : trend === "down" ? (
+                        <ArrowDownRight className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                      ) : null}
+                      {trendValue}
+                    </span>
+                  )}
+                  <span className="text-[10px] sm:text-xs text-gray-500 truncate">{subtitle}</span>
+                </div>
+              )}
+            </div>
+
+            <div
+              className={cn(
+                "p-2 sm:p-3 rounded-lg sm:rounded-xl bg-gradient-to-br shadow-lg transition-transform group-hover:scale-110 flex-shrink-0",
+                colors.bg,
+                colors.glow
+              )}
+            >
+              <Icon className={cn("w-4 h-4 sm:w-5 sm:h-5", colors.text)} />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+);
+StatCard.displayName = "StatCard";
+
+// Welcome Card with dynamic performance message
+const WelcomeCard = memo(({ userName, stats }: { userName: string; stats: DashboardStats }) => {
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 17) return "Good afternoon";
+    return "Good evening";
+  }, []);
+
+  const marketStatus = useMemo(() => getMarketStatus(), []);
+  
+  // Dynamic performance message based on actual stats
+  const performanceMessage = useMemo(() => {
+    const winRateNum = parseFloat(stats.winRate);
+    const pf = stats.profitFactor;
+    const isProfit = stats.totalPnL > 0;
+    const hasNoTrades = stats.totalTrades === 0;
+    
+    if (hasNoTrades) {
+      return "Start logging your trades to track your performance and improve your strategy.";
+    }
+    
+    // Calculate performance score
+    let score = 0;
+    
+    // Win rate scoring
+    if (winRateNum >= 65) score += 3;
+    else if (winRateNum >= 55) score += 2;
+    else if (winRateNum >= 45) score += 1;
+    
+    // Profit factor scoring
+    if (pf >= 2.5) score += 3;
+    else if (pf >= 1.5) score += 2;
+    else if (pf >= 1) score += 1;
+    
+    // P&L scoring
+    if (isProfit) score += 2;
+    
+    // Streak scoring
+    if (stats.streakType === "win" && stats.streak >= 5) score += 2;
+    else if (stats.streakType === "win" && stats.streak >= 3) score += 1;
+    else if (stats.streakType === "loss" && stats.streak >= 3) score -= 1;
+    
+    // Expectancy scoring
+    if (stats.expectancy > 0) score += 1;
+    
+    // Return message based on score
+    if (score >= 9) {
+      return "Outstanding performance! You're trading at an elite level. Keep executing your strategy flawlessly! 🏆";
+    }
+    if (score >= 7) {
+      return "Excellent work! Your trading metrics are impressive. Stay disciplined and maintain this momentum! 🔥";
+    }
+    if (score >= 5) {
+      return "Your trading performance is looking strong. Keep up the momentum!";
+    }
+    if (score >= 3) {
+      return "Solid progress! Focus on refining your edge and managing risk carefully.";
+    }
+    if (score >= 1) {
+      return "Keep analyzing your trades for patterns. Consistency is key to long-term success.";
+    }
+    
+    return "Take time to review your recent trades. Every setback is a learning opportunity.";
+  }, [stats]);
+
+  const WinRateIcon = parseFloat(stats.winRate) >= 50 ? TrendingUp : TrendingDown;
+  const winRateColor = parseFloat(stats.winRate) >= 50 ? "text-emerald-400" : "text-red-400";
+
+  return (
+    <Card className="dash-glass dash-card-hover relative overflow-hidden h-full">
+      <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-blue-500/5 to-purple-500/10" />
+      <div className="absolute top-0 right-0 w-40 sm:w-64 h-40 sm:h-64 bg-emerald-500/10 rounded-full blur-[60px] sm:blur-[80px] dash-float" />
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-blue-500 to-purple-500 opacity-50" />
+
+      <CardContent className="relative z-10 p-4 sm:p-6">
+        <div className="flex flex-col gap-4 sm:gap-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="space-y-3 sm:space-y-4 flex-1 min-w-0">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-400 dash-bounce" />
+                  <span className="text-xs sm:text-sm text-gray-400">{greeting}</span>
+                </div>
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-white">
+                  Welcome back,{" "}
+                  <span className="bg-gradient-to-r from-emerald-400 to-blue-400 bg-clip-text text-transparent">
+                    {userName}
+                  </span>
+                </h1>
+                <p className="text-gray-400 text-xs sm:text-sm md:text-base max-w-md">
+                  {performanceMessage}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+                <div className={cn(
+                  "flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border",
+                  marketStatus.isOpen 
+                    ? "bg-emerald-500/10 border-emerald-500/20" 
+                    : "bg-gray-500/10 border-gray-500/20"
+                )}>
+                  <div className={cn(
+                    "w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full",
+                    marketStatus.isOpen ? "bg-emerald-400 animate-pulse" : "bg-gray-400"
+                  )} />
+                  <span className={cn(
+                    "text-[10px] sm:text-xs font-medium",
+                    marketStatus.isOpen ? "text-emerald-400" : "text-gray-400"
+                  )}>
+                    {marketStatus.status}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-white/5 border border-white/10">
+                  <Activity className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-gray-400" />
+                  <span className="text-[10px] sm:text-xs text-gray-400">
+                    {stats.totalTrades} trades
+                  </span>
+                </div>
+                {stats.streak > 0 && (
+                  <div className={cn(
+                    "flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border",
+                    stats.streakType === "win" 
+                      ? "bg-orange-500/10 border-orange-500/20" 
+                      : "bg-red-500/10 border-red-500/20"
+                  )}>
+                    <Flame className={cn(
+                      "w-2.5 h-2.5 sm:w-3 sm:h-3",
+                      stats.streakType === "win" ? "text-orange-400" : "text-red-400"
+                    )} />
+                    <span className={cn(
+                      "text-[10px] sm:text-xs",
+                      stats.streakType === "win" ? "text-orange-400" : "text-red-400"
+                    )}>
+                      {stats.streak} {stats.streakType} streak
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Win Rate Circle - Hidden on very small screens, shown on sm+ */}
+            <div className="hidden sm:flex items-center gap-4 flex-shrink-0">
+              <div className="relative">
+                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-emerald-500/20 to-blue-500/20 flex items-center justify-center">
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#12131a] flex items-center justify-center">
+                    <div className="text-center">
+                      <p className={cn("text-xl sm:text-2xl font-bold", winRateColor)}>
+                        {stats.totalTrades > 0 ? `${stats.winRate}%` : "—"}
+                      </p>
+                      <p className="text-[10px] sm:text-xs text-gray-500">Win Rate</p>
+                    </div>
+                  </div>
+                </div>
+                <div className={cn(
+                  "absolute -top-1 -right-1 w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center dash-bounce",
+                  parseFloat(stats.winRate) >= 50 ? "bg-emerald-500" : "bg-red-500"
+                )}>
+                  <WinRateIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Mobile Win Rate - Shown only on xs screens */}
+          <div className="sm:hidden flex items-center justify-center">
+            <div className="relative">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-500/20 to-blue-500/20 flex items-center justify-center">
+                <div className="w-16 h-16 rounded-full bg-[#12131a] flex items-center justify-center">
+                  <div className="text-center">
+                    <p className={cn("text-xl font-bold", winRateColor)}>
+                      {stats.totalTrades > 0 ? `${stats.winRate}%` : "—"}
+                    </p>
+                    <p className="text-[10px] text-gray-500">Win Rate</p>
+                  </div>
+                </div>
+              </div>
+              <div className={cn(
+                "absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center dash-bounce",
+                parseFloat(stats.winRate) >= 50 ? "bg-emerald-500" : "bg-red-500"
+              )}>
+                <WinRateIcon className="w-2.5 h-2.5 text-white" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+WelcomeCard.displayName = "WelcomeCard";
+
+// Performance Chart with real data
+const PerformanceChart = memo(({ trades, stats, startingBalance }: { 
+  trades: Trade[]; 
+  stats: DashboardStats;
+  startingBalance: number;
+}) => {
+  const [hoveredBar, setHoveredBar] = useState<number | null>(null);
+  const [timeframe, setTimeframe] = useState<"1W" | "1M" | "3M" | "YTD" | "ALL">("1M");
+
+  const chartData = useMemo(() => {
+    return calculateEquityCurve(trades, startingBalance, timeframe);
+  }, [trades, startingBalance, timeframe]);
+
+  const chartMetrics = useMemo(() => {
+    if (chartData.length < 2) {
+      return { totalReturn: 0, maxDD: 0, sharpe: 0 };
+    }
+    
+    const startValue = chartData[0].value;
+    const endValue = chartData[chartData.length - 1].value;
+    const totalReturn = startValue > 0 ? ((endValue - startValue) / startValue) * 100 : 0;
+    const maxDD = calculateMaxDrawdown(chartData);
+    
+    return {
+      totalReturn,
+      maxDD,
+      sharpe: stats.sharpeRatio
+    };
+  }, [chartData, stats.sharpeRatio]);
+
+  const maxValue = chartData.length > 0 ? Math.max(...chartData.map((d) => d.value)) : startingBalance;
+  const minValue = chartData.length > 0 ? Math.min(...chartData.map((d) => d.value)) : startingBalance;
+  const range = maxValue - minValue || 1;
+
+  return (
+    <Card className="dash-glass dash-card-hover relative overflow-hidden h-full">
+      <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-blue-500/5" />
+      <CardHeader className="relative z-10 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+        <div className="flex flex-col gap-3 sm:gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <CardTitle className="text-base sm:text-lg text-white flex items-center gap-2">
+                <LineChart className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
+                Equity Curve
+              </CardTitle>
+              <CardDescription className="text-gray-500 text-xs sm:text-sm">
+                Portfolio performance over time
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto hide-scrollbar">
+              {(["1W", "1M", "3M", "YTD", "ALL"] as const).map((tf) => (
+                <button
+                  key={tf}
+                  onClick={() => setTimeframe(tf)}
+                  className={cn(
+                    "px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium rounded-lg transition-all flex-shrink-0",
+                    timeframe === tf
+                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                      : "text-gray-500 hover:text-white hover:bg-white/5"
+                  )}
+                >
+                  {tf}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="relative z-10 pt-2 sm:pt-4 px-3 sm:px-6 pb-3 sm:pb-6">
+        <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4 sm:mb-6">
+          <div className="p-2 sm:p-3 rounded-lg bg-white/5">
+            <p className="text-[10px] sm:text-xs text-gray-500 mb-0.5 sm:mb-1">Total Return</p>
+            <p className={cn(
+              "text-sm sm:text-lg font-bold",
+              chartMetrics.totalReturn >= 0 ? "text-emerald-400" : "text-red-400"
+            )}>
+              {chartMetrics.totalReturn >= 0 ? "+" : ""}{chartMetrics.totalReturn.toFixed(1)}%
+            </p>
+          </div>
+          <div className="p-2 sm:p-3 rounded-lg bg-white/5">
+            <p className="text-[10px] sm:text-xs text-gray-500 mb-0.5 sm:mb-1">Max DD</p>
+            <p className="text-sm sm:text-lg font-bold text-red-400">
+              -{chartMetrics.maxDD.toFixed(1)}%
+            </p>
+          </div>
+          <div className="p-2 sm:p-3 rounded-lg bg-white/5">
+            <p className="text-[10px] sm:text-xs text-gray-500 mb-0.5 sm:mb-1">Sharpe</p>
+            <p className={cn(
+              "text-sm sm:text-lg font-bold",
+              chartMetrics.sharpe >= 1 ? "text-emerald-400" : chartMetrics.sharpe >= 0 ? "text-white" : "text-red-400"
+            )}>
+              {chartMetrics.sharpe.toFixed(2)}
+            </p>
+          </div>
+        </div>
+
+        <div className="relative h-48 sm:h-64 mt-2 sm:mt-4">
+          <div className="absolute left-0 top-0 bottom-0 w-12 sm:w-16 flex flex-col justify-between text-[10px] sm:text-xs text-gray-500">
+            <span className="truncate">{formatCurrency(maxValue)}</span>
+            <span className="truncate">{formatCurrency((maxValue + minValue) / 2)}</span>
+            <span className="truncate">{formatCurrency(minValue)}</span>
+          </div>
+
+          <div className="ml-12 sm:ml-16 h-full relative">
+            <div className="absolute inset-0">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <div
+                  key={i}
+                  className="absolute w-full border-t border-white/5"
+                  style={{ top: `${i * 25}%` }}
+                />
+              ))}
+            </div>
+
+            {chartData.length > 0 && (
+              <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop
+                      offset="0%"
+                      stopColor={chartMetrics.totalReturn >= 0 ? "rgb(16, 185, 129)" : "rgb(239, 68, 68)"}
+                      stopOpacity="0.3"
+                    />
+                    <stop
+                      offset="100%"
+                      stopColor={chartMetrics.totalReturn >= 0 ? "rgb(16, 185, 129)" : "rgb(239, 68, 68)"}
+                      stopOpacity="0"
+                    />
+                  </linearGradient>
+                </defs>
+                <path
+                  d={`
+                    M 0 ${100 - ((chartData[0].value - minValue) / range) * 100}%
+                    ${chartData
+                      .map((d, i) => {
+                        const x = (i / (chartData.length - 1)) * 100;
+                        const y = 100 - ((d.value - minValue) / range) * 100;
+                        return `L ${x}% ${y}%`;
+                      })
+                      .join(" ")}
+                    L 100% 100%
+                    L 0 100%
+                    Z
+                  `}
+                  fill="url(#chartGradient)"
+                />
+                <path
+                  d={`
+                    M 0 ${100 - ((chartData[0].value - minValue) / range) * 100}%
+                    ${chartData
+                      .map((d, i) => {
+                        const x = (i / (chartData.length - 1)) * 100;
+                        const y = 100 - ((d.value - minValue) / range) * 100;
+                        return `L ${x}% ${y}%`;
+                      })
+                      .join(" ")}
+                  `}
+                  fill="none"
+                  stroke={chartMetrics.totalReturn >= 0 ? "rgb(16, 185, 129)" : "rgb(239, 68, 68)"}
+                  strokeWidth="2"
+                  vectorEffect="non-scaling-stroke"
+                />
+              </svg>
+            )}
+
+            <div className="absolute inset-0 flex items-end">
+              {chartData
+                .filter((_, i) => i % Math.ceil(chartData.length / 20) === 0)
+                .map((d, i) => (
+                  <div
+                    key={i}
+                    className="flex-1 h-full relative group cursor-crosshair"
+                    onMouseEnter={() => setHoveredBar(i)}
+                    onMouseLeave={() => setHoveredBar(null)}
+                  >
+                    {hoveredBar === i && (
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 p-2 bg-[#1a1b23] border border-white/10 rounded-lg shadow-xl z-10 whitespace-nowrap">
+                        <p className="text-[10px] sm:text-xs text-gray-400">{d.date}</p>
+                        <p className="text-xs sm:text-sm font-bold text-white">
+                          {formatCurrency(d.value)}
+                        </p>
+                        <p
+                          className={cn(
+                            "text-[10px] sm:text-xs font-medium",
+                            d.isProfit ? "text-emerald-400" : "text-red-400"
+                          )}
+                        >
+                          {d.isProfit ? "+" : ""}
+                          {formatCurrency(d.pnl)}
+                        </p>
+                        {d.tradeCount > 0 && (
+                          <p className="text-[10px] text-gray-500">
+                            {d.tradeCount} trade{d.tradeCount > 1 ? 's' : ''}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+        
+        {chartData.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-center">
+              <CandlestickChart className="w-10 h-10 text-gray-600 mx-auto mb-2" />
+              <p className="text-gray-400 text-sm">No trade data available</p>
+              <p className="text-gray-500 text-xs">Log trades to see your equity curve</p>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+});
+PerformanceChart.displayName = "PerformanceChart";
+
+// Recent Trades
+const RecentTrades = memo(({ trades }: { trades: Trade[] }) => {
+  const navigate = useNavigate();
+  const recentTrades = trades.slice(0, 5);
+  
+  return (
+    <Card className="dash-glass dash-card-hover relative overflow-hidden h-full">
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5" />
+      <CardHeader className="relative z-10 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <CardTitle className="text-base sm:text-lg text-white flex items-center gap-2">
+              <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400 flex-shrink-0" />
+              <span className="truncate">Recent Activity</span>
+            </CardTitle>
+            <CardDescription className="text-gray-500 text-xs sm:text-sm">
+              Your latest trades
+            </CardDescription>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-gray-400 hover:text-white flex-shrink-0 text-xs sm:text-sm px-2 sm:px-3"
+            onClick={() => navigate("/journal")}
+          >
+            <span className="hidden sm:inline">View All</span>
+            <ChevronRight className="w-4 h-4 sm:ml-1" />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="relative z-10 pt-2 sm:pt-4 px-3 sm:px-6 pb-3 sm:pb-6">
+        <div className="space-y-2 sm:space-y-3">
+          {recentTrades.length > 0 ? (
+            recentTrades.map((trade, index) => (
+              <div
+                key={trade.id}
+                className="flex items-center justify-between p-2 sm:p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-all group cursor-pointer dash-slide-right gap-2"
+                style={{ animationDelay: `${index * 100}ms` }}
+              >
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                  <div
+                    className={cn(
+                      "w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center flex-shrink-0",
+                      trade.side === "long"
+                        ? "bg-emerald-500/20 text-emerald-400"
+                        : "bg-red-500/20 text-red-400"
+                    )}
+                  >
+                    {trade.side === "long" ? (
+                      <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
+                    ) : (
+                      <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-white group-hover:text-emerald-400 transition-colors text-sm sm:text-base truncate">
+                      {trade.symbol}
+                    </p>
+                    <p className="text-[10px] sm:text-xs text-gray-500 truncate">
+                      {trade.strategy || "Manual Trade"}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p
+                    className={cn(
+                      "font-bold tabular-nums text-sm sm:text-base",
+                      trade.profit_loss_currency >= 0
+                        ? "text-emerald-400"
+                        : "text-red-400"
+                    )}
+                  >
+                    {trade.profit_loss_currency >= 0 ? "+" : ""}
+                    {formatCurrency(trade.profit_loss_currency)}
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-gray-500">
+                    {getTimeAgo(trade.closed_at)}
+                  </p>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="text-center py-6 sm:py-8">
+              <CandlestickChart className="w-10 h-10 sm:w-12 sm:h-12 text-gray-600 mx-auto mb-2 sm:mb-3" />
+              <p className="text-gray-400 text-sm sm:text-base">No trades yet</p>
+              <p className="text-xs sm:text-sm text-gray-500">
+                Start logging your trades to see them here
+              </p>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+RecentTrades.displayName = "RecentTrades";
+
+// Quick Actions
+const QuickActions = memo(({ onNavigate }: { onNavigate: (path: string) => void }) => {
+  const actions = [
+    {
+      icon: PlusCircle,
+      label: "Log Trade",
+      description: "Record new",
+      path: "/journal",
+      primary: true,
+    },
+    {
+      icon: BookOpen,
+      label: "Playbook",
+      description: "Strategies",
+      path: "/playbook",
+    },
+    {
+      icon: BarChart3,
+      label: "Analytics",
+      description: "Statistics",
+      path: "/analytics",
+    },
+    {
+      icon: Calendar,
+      label: "Calendar",
+      description: "Schedule",
+      path: "/calendar",
+    },
+  ];
+
+  return (
+    <Card className="dash-glass dash-card-hover relative overflow-hidden h-full">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-purple-500/8 to-pink-500/10" />
+      <CardHeader className="relative z-10 pb-2 px-3 sm:px-4 pt-3 sm:pt-4">
+        <CardTitle className="text-sm sm:text-base text-white flex items-center gap-2">
+          <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-400" />
+          <span>Quick Actions</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="relative z-10 pt-1 sm:pt-2 pb-3 sm:pb-4 px-3 sm:px-4">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3">
+          {actions.map((action, index) => (
+            <Button
+              key={action.label}
+              variant={action.primary ? "default" : "outline"}
+              className={cn(
+                "h-auto py-2.5 sm:py-3 md:py-4 flex flex-col items-center gap-1 sm:gap-1.5 md:gap-2 group transition-all w-full",
+                action.primary
+                  ? "bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 shadow-lg shadow-emerald-500/25"
+                  : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20"
+              )}
+              onClick={() => onNavigate(action.path)}
+              style={{ animationDelay: `${index * 50}ms` }}
+            >
+              <action.icon
+                className={cn(
+                  "w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 transition-transform group-hover:scale-110",
+                  action.primary ? "text-white" : "text-gray-400 group-hover:text-white"
+                )}
+              />
+              <div className="text-center space-y-0">
+                <p className="font-semibold text-[10px] sm:text-[11px] md:text-sm text-white truncate">
+                  {action.label}
+                </p>
+                <p
+                  className={cn(
+                    "text-[9px] sm:text-[10px] md:text-xs leading-tight hidden sm:block",
+                    action.primary ? "text-white/70" : "text-gray-500"
+                  )}
+                >
+                  {action.description}
+                </p>
+              </div>
+            </Button>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+QuickActions.displayName = "QuickActions";
+
+// Trading Goals with real data
+const TradingGoals = memo(({ stats, userGoals }: { 
+  stats: DashboardStats;
+  userGoals: {
+    monthlyPnLGoal: number;
+    monthlyTradesGoal: number;
+    winRateGoal: number;
+  };
+}) => {
+  const goals = useMemo(() => [
+    {
+      label: "Monthly P&L",
+      current: stats.monthlyPnL,
+      target: userGoals.monthlyPnLGoal,
+      color: "emerald" as const,
+    },
+    { 
+      label: "Win Rate", 
+      current: parseFloat(stats.winRate), 
+      target: userGoals.winRateGoal, 
+      unit: "%", 
+      color: "blue" as const 
+    },
+    {
+      label: "Trades/Month",
+      current: stats.monthlyTrades,
+      target: userGoals.monthlyTradesGoal,
+      color: "purple" as const,
+    },
+  ], [stats, userGoals]);
+
+  const navigate = useNavigate();
+
+  return (
+    <Card className="dash-glass dash-card-hover relative overflow-hidden h-full">
+      <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-red-500/5" />
+      <CardHeader className="relative z-10 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-base sm:text-lg text-white flex items-center gap-2">
+            <Target className="w-4 h-4 sm:w-5 sm:h-5 text-orange-400" />
+            <span className="truncate">Trading Goals</span>
+          </CardTitle>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-gray-400 hover:text-white p-1.5 sm:p-2"
+            onClick={() => navigate("/settings")}
+          >
+            <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="relative z-10 pt-1 sm:pt-2 space-y-3 sm:space-y-4 px-3 sm:px-6 pb-3 sm:pb-6">
+        {goals.map((goal) => {
+          const progress = goal.target > 0 ? (goal.current / goal.target) * 100 : 0;
+          const colorClasses = {
+            emerald: "bg-emerald-500",
+            blue: "bg-blue-500",
+            purple: "bg-purple-500",
+          };
+          const isComplete = progress >= 100;
+          
+          return (
+            <div key={goal.label} className="space-y-1.5 sm:space-y-2">
+              <div className="flex items-center justify-between text-xs sm:text-sm">
+                <span className="text-gray-400 truncate flex items-center gap-1">
+                  {goal.label}
+                  {isComplete && (
+                    <Award className="w-3 h-3 text-yellow-400" />
+                  )}
+                </span>
+                <span className="text-white font-medium text-[11px] sm:text-sm flex-shrink-0 ml-2">
+                  {goal.unit 
+                    ? `${goal.current.toFixed(1)}${goal.unit}` 
+                    : formatCurrency(goal.current)}{" "}
+                  /{" "}
+                  {goal.unit 
+                    ? `${goal.target}${goal.unit}` 
+                    : formatCurrency(goal.target)}
+                </span>
+              </div>
+              <div className="h-1.5 sm:h-2 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all duration-1000 ease-out",
+                    colorClasses[goal.color],
+                    isComplete && "dash-glow"
+                  )}
+                  style={{ width: `${Math.min(progress, 100)}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-gray-500 text-right">
+                {progress.toFixed(0)}% complete
+              </p>
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+});
+TradingGoals.displayName = "TradingGoals";
+
+// Performance Metrics
+const PerformanceMetrics = memo(({ stats }: { stats: DashboardStats }) => {
+  const metrics = useMemo(() => [
+    {
+      label: "Profit Factor",
+      value: stats.profitFactor.toFixed(2),
+      icon: TrendingUp,
+      trend: stats.profitFactor >= 1 ? "up" as const : "down" as const,
+    },
+    {
+      label: "Avg Win",
+      value: formatCurrency(stats.avgWin),
+      icon: ArrowUpRight,
+      trend: "up" as const,
+    },
+    {
+      label: "Avg Loss",
+      value: formatCurrency(stats.avgLoss),
+      icon: ArrowDownRight,
+      trend: "down" as const,
+    },
+    {
+      label: "Expectancy",
+      value: formatCurrency(stats.expectancy),
+      icon: Target,
+      trend: stats.expectancy >= 0 ? "up" as const : "down" as const,
+    },
+    {
+      label: "Best Trade",
+      value: formatCurrency(stats.bestTrade),
+      icon: Award,
+      trend: "up" as const,
+    },
+    {
+      label: "Worst Trade",
+      value: formatCurrency(stats.worstTrade),
+      icon: AlertCircle,
+      trend: "down" as const,
+    },
+  ], [stats]);
+
+  return (
+    <Card className="dash-glass dash-card-hover relative overflow-hidden h-full">
+      <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-teal-500/5" />
+      <CardHeader className="relative z-10 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+        <CardTitle className="text-base sm:text-lg text-white flex items-center gap-2">
+          <PieChart className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
+          <span className="truncate">Performance Metrics</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="relative z-10 pt-1 sm:pt-2 px-3 sm:px-6 pb-3 sm:pb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+          {metrics.map((metric) => (
+            <div
+              key={metric.label}
+              className="p-2 sm:p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-all group"
+            >
+              <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
+                <metric.icon
+                  className={cn(
+                    "w-3 h-3 sm:w-4 sm:h-4",
+                    metric.trend === "up" ? "text-emerald-400" : "text-red-400"
+                  )}
+                />
+                <span className="text-[10px] sm:text-xs text-gray-500 truncate">{metric.label}</span>
+              </div>
+              <p
+                className={cn(
+                  "text-sm sm:text-lg font-bold truncate",
+                  metric.trend === "up"
+                    ? "text-emerald-400"
+                    : metric.trend === "down"
+                    ? "text-red-400"
+                    : "text-white"
+                )}
+              >
+                {metric.value}
+              </p>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+PerformanceMetrics.displayName = "PerformanceMetrics";
+
+// Main Dashboard
+const Dashboard = () => {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const stylesInjected = useRef(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(new Date());
+
+  useEffect(() => {
+    if (!stylesInjected.current) {
+      const styleSheet = document.createElement("style");
+      styleSheet.id = "dashboard-animations";
+      styleSheet.textContent = DASHBOARD_STYLES;
+      document.head.appendChild(styleSheet);
+      stylesInjected.current = true;
+    }
+    setIsLoaded(true);
+    return () => {
+      const existingStyle = document.getElementById("dashboard-animations");
+      if (existingStyle) existingStyle.remove();
+    };
+  }, []);
+
+  // Fetch user profile
+  const { data: userProfile } = useQuery({
+    queryKey: ["userProfile"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+      
+      return {
+        id: user.id,
+        full_name: profile?.full_name,
+        username: profile?.username,
+        email: user.email,
+        monthly_pnl_goal: profile?.monthly_pnl_goal || 5000,
+        monthly_trades_goal: profile?.monthly_trades_goal || 40,
+        win_rate_goal: profile?.win_rate_goal || 60,
+        starting_balance: profile?.starting_balance || 10000,
+      } as UserProfile;
+    },
+  });
+
+  // Get display name
+  const displayName = useMemo(() => {
+    if (!userProfile) return "Trader";
+    return userProfile.full_name || 
+           userProfile.username || 
+           userProfile.email?.split('@')[0] || 
+           "Trader";
+  }, [userProfile]);
+
+  // Fetch trades
+  const { data: trades = [], refetch: refetchTrades } = useQuery({
+    queryKey: ["trades"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      
+      const { data, error } = await supabase
+        .from("trades")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("closed_at", { ascending: false });
+      if (error) throw error;
+      return data as unknown as Trade[];
+    },
+  });
+
+  // Calculate all stats
+  const stats = useMemo((): DashboardStats => {
+    const totalTrades = trades.length;
+    
+    // Current month boundaries
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    
+    // Monthly trades
+    const monthlyTradesData = trades.filter(t => 
+      new Date(t.closed_at) >= startOfMonth
+    );
+    const monthlyTrades = monthlyTradesData.length;
+    const monthlyPnL = monthlyTradesData.reduce(
+      (sum, t) => sum + (t.profit_loss_currency || 0), 
+      0
+    );
+    
+    // Winning trades (P&L > 0)
+    const winningTrades = trades.filter((t) => (t.profit_loss_currency || 0) > 0);
+    const wins = winningTrades.length;
+    
+    // Losing trades (P&L < 0)
+    const losingTrades = trades.filter((t) => (t.profit_loss_currency || 0) < 0);
+    const losses = losingTrades.length;
+    
+    // Break-even trades
+    const breakEvenTrades = trades.filter((t) => (t.profit_loss_currency || 0) === 0);
+    const breakEven = breakEvenTrades.length;
+    
+    // Decisive trades
+    const decisiveTrades = wins + losses;
+    
+    // Total P&L
+    const totalPnL = trades.reduce(
+      (sum, t) => sum + (t.profit_loss_currency || 0),
+      0
+    );
+    
+    // Win rate
+    const winRate = decisiveTrades > 0 
+      ? (wins / decisiveTrades) * 100 
+      : 0;
+
+    // Average win
+    const totalWinAmount = winningTrades.reduce(
+      (sum, t) => sum + (t.profit_loss_currency || 0),
+      0
+    );
+    const avgWin = wins > 0 ? totalWinAmount / wins : 0;
+    
+    // Average loss
+    const totalLossAmount = Math.abs(
+      losingTrades.reduce(
+        (sum, t) => sum + (t.profit_loss_currency || 0),
+        0
+      )
+    );
+    const avgLoss = losses > 0 ? totalLossAmount / losses : 0;
+
+    // Profit factor
+    const profitFactor =
+      totalLossAmount > 0
+        ? totalWinAmount / totalLossAmount
+        : totalWinAmount > 0
+        ? Infinity
+        : 0;
+        
+    // Expectancy
+    const expectancy = totalTrades > 0 ? totalPnL / totalTrades : 0;
+
+    // Best and worst trades
+    const allPnL = trades.map((t) => t.profit_loss_currency || 0);
+    const bestTrade = allPnL.length > 0 ? Math.max(...allPnL) : 0;
+    const worstTrade = allPnL.length > 0 ? Math.min(...allPnL) : 0;
+
+    // Calculate streak
+    const { streak, type: streakType } = calculateStreak(trades);
+    
+    // Calculate max drawdown and sharpe
+    const startingBalance = userProfile?.starting_balance || 10000;
+    const equityCurve = calculateEquityCurve(trades, startingBalance, "ALL");
+    const maxDrawdown = calculateMaxDrawdown(equityCurve);
+    const sharpeRatio = calculateSharpeRatio(trades);
+    
+    // Total return
+    const totalReturn = startingBalance > 0 
+      ? (totalPnL / startingBalance) * 100 
+      : 0;
+
+    return {
+      totalTrades,
+      wins,
+      losses,
+      breakEven,
+      decisiveTrades,
+      totalPnL,
+      winRate: winRate.toFixed(1),
+      profitFactor: isFinite(profitFactor) ? profitFactor : 0,
+      avgWin,
+      avgLoss,
+      expectancy,
+      bestTrade,
+      worstTrade,
+      streak,
+      streakType,
+      monthlyPnL,
+      monthlyTrades,
+      maxDrawdown,
+      totalReturn,
+      sharpeRatio,
+    };
+  }, [trades, userProfile?.starting_balance]);
+
+  // User goals
+  const userGoals = useMemo(() => ({
+    monthlyPnLGoal: userProfile?.monthly_pnl_goal || 5000,
+    monthlyTradesGoal: userProfile?.monthly_trades_goal || 40,
+    winRateGoal: userProfile?.win_rate_goal || 60,
+  }), [userProfile]);
+
+  // Starting balance
+  const startingBalance = userProfile?.starting_balance || 10000;
+
+  // Animated counters
+  const animatedWinRate = useAnimatedCounter(parseFloat(stats.winRate), 1500, 1);
+  const animatedPnL = useAnimatedCounter(stats.totalPnL, 1500, 2);
+  const animatedTrades = useAnimatedCounter(stats.totalTrades, 1500);
+
+  const handleNavigate = useCallback(
+    (path: string) => {
+      navigate(path);
+    },
+    [navigate]
+  );
+
+  const handleRefresh = useCallback(async () => {
+    await refetchTrades();
+    setLastUpdated(new Date());
+  }, [refetchTrades]);
+
+  // Calculate unread notifications (placeholder - integrate with your notification system)
+  const unreadNotifications = useMemo(() => {
+    // This would normally come from a notifications query
+    return 0;
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-[#0a0b0f] text-white relative overflow-x-hidden">
+      <FloatingOrbs />
+      <AnimatedGrid />
+      <div
+        className={cn(
+          "relative z-10 pt-4 sm:pt-6 pb-6 sm:pb-8 px-3 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full transition-all duration-700",
+          isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+        )}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6 sm:mb-8 gap-3">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+            <div className="relative flex-shrink-0">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-blue-600 flex items-center justify-center shadow-lg shadow-emerald-500/25 dash-float">
+                <LineChart className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+              </div>
+              {unreadNotifications > 0 && (
+                <div className="absolute -top-1 -right-1 w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-red-500 flex items-center justify-center">
+                  <span className="text-[8px] sm:text-[10px] font-bold text-white">
+                    {unreadNotifications}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold text-white truncate">Dashboard</h1>
+              <p className="text-xs sm:text-sm text-gray-500 truncate">Real-time trading analytics</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              className="bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10 hidden sm:flex"
+              onClick={handleRefresh}
+            >
+              <RefreshCw className="w-4 h-4 sm:mr-2" />
+              <span className="hidden md:inline">Sync</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10 p-2 sm:p-2.5 relative"
+              onClick={() => navigate("/notifications")}
+            >
+              <Bell className="w-4 h-4" />
+              {unreadNotifications > 0 && (
+                <div className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-500" />
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10 p-2 sm:p-2.5"
+              onClick={() => navigate("/settings")}
+            >
+              <Settings className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Row: Welcome + Quick Actions */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6 mb-4 sm:mb-6">
+          <div
+            className="lg:col-span-2 dash-slide-up"
+            style={{ animationDelay: "0ms" }}
+          >
+            <WelcomeCard userName={displayName} stats={stats} />
+          </div>
+          <div
+            className="dash-slide-up"
+            style={{ animationDelay: "50ms" }}
+          >
+            <QuickActions onNavigate={handleNavigate} />
+          </div>
+        </div>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+          {/* Row 1: P&L and Win Rate (Large Cards) */}
+          <div className="col-span-1 sm:col-span-2 dash-slide-up" style={{ animationDelay: "100ms" }}>
+            <StatCard
+              title="Total P&L"
+              value={formatCurrency(animatedPnL)}
+              icon={DollarSign}
+              trend={stats.totalPnL >= 0 ? "up" : "down"}
+              trendValue={formatPercent(stats.totalReturn)}
+              subtitle="All time"
+              color={stats.totalPnL >= 0 ? "emerald" : "red"}
+              size="large"
+            />
+          </div>
+
+          <div className="col-span-1 sm:col-span-2 dash-slide-up" style={{ animationDelay: "150ms" }}>
+            <StatCard
+              title="Win Rate"
+              value={stats.totalTrades > 0 ? `${animatedWinRate}%` : "—"}
+              icon={Target}
+              trend={parseFloat(stats.winRate) >= 50 ? "up" : "down"}
+              trendValue={`${stats.wins}W / ${stats.losses}L`}
+              subtitle={stats.breakEven > 0 ? `Excl. ${stats.breakEven} BE` : "Wins / (Wins + Losses)"}
+              color="blue"
+              size="large"
+            />
+          </div>
+
+          {/* Row 2: Smaller Stats Cards */}
+          <div className="dash-slide-up" style={{ animationDelay: "200ms" }}>
+            <StatCard
+              title="Total Trades"
+              value={animatedTrades}
+              icon={Activity}
+              trend="neutral"
+              subtitle={stats.breakEven > 0 ? `${stats.breakEven} break-even` : "All time"}
+              color="purple"
+            />
+          </div>
+
+          <div className="dash-slide-up" style={{ animationDelay: "250ms" }}>
+            <StatCard
+              title="Profit Factor"
+              value={stats.totalTrades > 0 ? stats.profitFactor.toFixed(2) : "—"}
+              icon={TrendingUp}
+              trend={
+                stats.profitFactor >= 1.5
+                  ? "up"
+                  : stats.profitFactor >= 1
+                  ? "neutral"
+                  : "down"
+              }
+              subtitle="Gross profit ÷ loss"
+              color={stats.profitFactor >= 1.5 ? "emerald" : "orange"}
+            />
+          </div>
+
+          <div className="dash-slide-up" style={{ animationDelay: "300ms" }}>
+            <StatCard
+              title="Current Streak"
+              value={stats.streak}
+              icon={Flame}
+              trend={stats.streakType === "win" ? "up" : stats.streakType === "loss" ? "down" : "neutral"}
+              trendValue={stats.streakType !== "none" ? stats.streakType : undefined}
+              subtitle={stats.streakType === "win" ? "Consecutive wins" : stats.streakType === "loss" ? "Consecutive losses" : "No streak"}
+              color={stats.streakType === "win" ? "orange" : stats.streakType === "loss" ? "red" : "purple"}
+            />
+          </div>
+
+          <div className="dash-slide-up" style={{ animationDelay: "350ms" }}>
+            <StatCard
+              title="Expectancy"
+              value={stats.totalTrades > 0 ? formatCurrency(stats.expectancy) : "—"}
+              icon={Zap}
+              trend={stats.expectancy >= 0 ? "up" : "down"}
+              subtitle="Avg P&L per trade"
+              color={stats.expectancy >= 0 ? "emerald" : "red"}
+            />
+          </div>
+
+          {/* Row 3: Performance Chart - Full Width */}
+          <div
+            className="col-span-1 sm:col-span-2 lg:col-span-4 dash-slide-up"
+            style={{ animationDelay: "400ms" }}
+          >
+            <PerformanceChart 
+              trades={trades} 
+              stats={stats}
+              startingBalance={startingBalance}
+            />
+          </div>
+
+          {/* Row 4: Recent Trades - Full Width */}
+          <div
+            className="col-span-1 sm:col-span-2 lg:col-span-4 dash-slide-up"
+            style={{ animationDelay: "450ms" }}
+          >
+            <RecentTrades trades={trades} />
+          </div>
+
+          {/* Row 5: Goals & Metrics */}
+          <div className="col-span-1 sm:col-span-1 lg:col-span-2 dash-slide-up" style={{ animationDelay: "500ms" }}>
+            <TradingGoals stats={stats} userGoals={userGoals} />
+          </div>
+
+          <div className="col-span-1 sm:col-span-1 lg:col-span-2 dash-slide-up" style={{ animationDelay: "550ms" }}>
+            <PerformanceMetrics stats={stats} />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-3 text-[10px] sm:text-xs text-gray-500">
+          <div className="flex items-center gap-2">
+            <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500" />
+            <span>256-bit AES Encryption</span>
+          </div>
+          <div className="flex items-center gap-3 sm:gap-4">
+            <span className="hidden sm:inline">
+              Last updated: {lastUpdated.toLocaleTimeString()}
+            </span>
+            <div className="flex items-center gap-1">
+              <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Live</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Dashboard;

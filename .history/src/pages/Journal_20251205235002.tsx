@@ -49,59 +49,23 @@ const JOURNAL_STYLES = `
     box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
   }
   
-  .journal-row {
-    background-color: transparent;
-    transition: background-color 0.2s ease;
-  }
-
-  /* Hover effect for the whole row */
   .journal-row:hover {
-    background-color: rgba(255, 255, 255, 0.03);
-  }
-
-  /* STICKY COLUMN LOGIC - Ensures content slides UNDER this column */
-  .sticky-col {
-    position: sticky;
-    left: 0;
-    z-index: 20;
-    background-color: #0a0b0f; /* MUST be solid color matching bg to hide scrolling content */
-    border-right: 1px solid rgba(255,255,255,0.05);
-    transition: background-color 0.2s ease;
-  }
-  
-  .sticky-header {
-    z-index: 30; /* Header must be above row sticky cols */
-    background-color: #0a0b0f; 
-  }
-
-  /* When hovering the row, change the sticky column bg to match */
-  .journal-row:hover .sticky-col {
-    background-color: #13141c; 
+    background: rgba(255, 255, 255, 0.03);
   }
 
   .animate-enter { animation: enter 0.5s ease-out forwards; opacity: 0; transform: translateY(10px); }
   @keyframes enter { to { opacity: 1; transform: translateY(0); } }
   
-  /* Custom Scrollbar - Styled to match theme */
-  .custom-scrollbar::-webkit-scrollbar {
-    height: 10px;
-    width: 10px;
+  /* Hide scrollbar but keep functionality */
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
   }
-  .custom-scrollbar::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: 4px;
-  }
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
-    border: 2px solid transparent;
-    background-clip: content-box;
-  }
-  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: rgba(52, 211, 153, 0.5);
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 
-  /* Smooth horizontal scrolling */
+  /* Smooth horizontal scrolling just inside the journal table */
   .journal-scroll-area {
     scroll-behavior: smooth;
   }
@@ -246,7 +210,7 @@ const Journal = () => {
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Horizontal scroll helpers
+  // Horizontal scroll helpers for the journal table
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -358,7 +322,8 @@ const Journal = () => {
     return { total, netPnL, winRate, openPositions };
   }, [trades]);
 
-  // Scroll Logic
+  // --- horizontal scroll helpers for the journal table ---
+
   const updateScrollButtons = () => {
     const el = tableScrollRef.current;
     if (!el) return;
@@ -370,7 +335,7 @@ const Journal = () => {
   const scrollHorizontally = (direction: "left" | "right") => {
     const el = tableScrollRef.current;
     if (!el) return;
-    const delta = el.clientWidth * 0.5;
+    const delta = el.clientWidth * 0.7; // ~70% of visible width for comfy reading
     el.scrollBy({
       left: direction === "left" ? -delta : delta,
       behavior: "smooth",
@@ -378,19 +343,19 @@ const Journal = () => {
   };
 
   useEffect(() => {
+    // Recompute whenever the set of visible trades changes
     updateScrollButtons();
   }, [filteredTrades.length]);
 
   return (
-    // CRITICAL: min-w-0 allows this container to shrink to fit the remaining space
-    // next to the sidebar, instead of trying to be 100vw.
-    <div className="flex-1 w-full min-w-0 bg-[#0a0b0f] text-white relative font-sans selection:bg-emerald-500/30">
+    // overflow-x-hidden here keeps the PAGE from side scrolling under the sidebar;
+    // all horizontal scroll is inside the journal table only.
+    <div className="min-h-screen bg-[#0a0b0f] text-white relative overflow-x-hidden font-sans selection:bg-emerald-500/30">
       <FloatingOrbs />
 
-      <div className="relative z-10 w-full flex flex-col px-3 sm:px-6 lg:px-8 py-4 sm:py-8 animate-enter">
-        
+      <div className="relative z-10 w-full max-w-[1800px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 animate-enter">
         {/* Header & Actions */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6 sm:mb-8 flex-shrink-0">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6 sm:mb-8">
           <div className="min-w-0 flex-1">
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
               Trade Journal
@@ -408,7 +373,7 @@ const Journal = () => {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 mb-6 sm:mb-8 flex-shrink-0">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 mb-6 sm:mb-8">
           <StatBadge
             label="Net P&L"
             value={`$${stats.netPnL.toFixed(2)}`}
@@ -436,7 +401,7 @@ const Journal = () => {
         </div>
 
         {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4 sm:mb-6 flex-shrink-0">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4 sm:mb-6">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
             <input
@@ -467,7 +432,7 @@ const Journal = () => {
 
         {/* Trade Form */}
         {showForm && (
-          <div className="mb-6 sm:mb-8 animate-in fade-in slide-in-from-top-4 duration-300 flex-shrink-0">
+          <div className="mb-6 sm:mb-8 animate-in fade-in slide-in-from-top-4 duration-300">
             <Card className="journal-glass border-white/10">
               <CardHeader className="border-b border-white/5 pb-4 px-4 sm:px-6 flex flex-row items-center justify-between">
                 <CardTitle className="text-base sm:text-lg font-medium">
@@ -491,21 +456,21 @@ const Journal = () => {
           </div>
         )}
 
-        {/* Main Table Container - The min-w-0 ensures it respects the flex parent */}
-        <Card className="journal-glass border-none overflow-hidden w-full min-w-0 flex flex-col flex-1">
-          <CardContent className="p-0 w-full h-full flex flex-col relative">
+        {/* Main Table */}
+        <Card className="journal-glass border-none overflow-hidden">
+          <CardContent className="p-0">
             {loading ? (
-              <div className="flex justify-center py-20 flex-1">
+              <div className="flex justify-center py-20">
                 <div className="animate-spin h-6 w-6 border-2 border-emerald-500 border-t-transparent rounded-full" />
               </div>
             ) : filteredTrades.length === 0 ? (
-              <div className="text-center py-20 text-gray-500 flex-1">
+              <div className="text-center py-20 text-gray-500">
                 No trades found
               </div>
             ) : (
               <>
                 {/* Mobile List */}
-                <div className="block lg:hidden p-3 space-y-3 overflow-y-auto flex-1">
+                <div className="block lg:hidden p-3 space-y-3">
                   {filteredTrades.map((trade) => (
                     <MobileTradeCard
                       key={trade.id}
@@ -515,23 +480,16 @@ const Journal = () => {
                   ))}
                 </div>
 
-                {/* Desktop Table */}
-                {/* overflow-x-auto is APPLIED HERE. This forces the scrollbar to be on THIS div, not the window. */}
-                <div className="hidden lg:block w-full h-full relative">
+                {/* Desktop Table: horizontal scroll is confined here */}
+                <div className="hidden lg:block relative">
                   <div
                     ref={tableScrollRef}
-                    className="journal-scroll-area overflow-x-auto custom-scrollbar w-full h-full pb-3"
+                    className="journal-scroll-area overflow-x-auto hide-scrollbar"
                     onScroll={updateScrollButtons}
                   >
-                    <Table className="min-w-[1400px]">
-                      <TableHeader className="bg-white/[0.02] border-b border-white/5 sticky top-0 z-30 backdrop-blur-sm">
+                    <Table className="min-w-[1200px]">
+                      <TableHeader className="bg-white/[0.02] border-b border-white/5 sticky top-0 z-10 backdrop-blur-sm">
                         <TableRow className="hover:bg-transparent border-none">
-                          
-                          {/* STICKY INSTRUMENT COLUMN HEADER */}
-                          <TableHead className="h-10 text-[10px] font-bold text-gray-500 uppercase tracking-wider pl-6 sticky-col sticky-header min-w-[120px]">
-                            Instrument
-                          </TableHead>
-                          
                           <TableHead className="h-10 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-center w-[80px]">
                             Status
                           </TableHead>
@@ -540,6 +498,9 @@ const Journal = () => {
                           </TableHead>
                           <TableHead className="h-10 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-center w-[80px]">
                             Direction
+                          </TableHead>
+                          <TableHead className="h-10 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                            Instrument
                           </TableHead>
                           <TableHead className="h-10 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                             Opened
@@ -559,7 +520,7 @@ const Journal = () => {
                           <TableHead className="h-10 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-right">
                             P&L
                           </TableHead>
-                          <TableHead className="h-10 text-[10px] font-bold text-gray-500 uppercase tracking-wider pl-4">
+                          <TableHead className="h-10 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                             Setup
                           </TableHead>
                           <TableHead className="h-10 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-center">
@@ -583,14 +544,9 @@ const Journal = () => {
                           return (
                             <TableRow
                               key={trade.id}
-                              className="journal-row border-b border-white/5 text-xs group"
+                              className="journal-row border-b border-white/5 transition-colors text-xs group"
                             >
-                              {/* 1. STICKY INSTRUMENT COLUMN */}
-                              <TableCell className="sticky-col pl-6 font-bold text-white whitespace-nowrap">
-                                {trade.instrument}
-                              </TableCell>
-
-                              {/* 2. Status */}
+                              {/* 1. Status */}
                               <TableCell className="text-center">
                                 <Badge
                                   variant="outline"
@@ -605,7 +561,7 @@ const Journal = () => {
                                 </Badge>
                               </TableCell>
 
-                              {/* 3. Result */}
+                              {/* 2. Profit/Loss (Result Label) */}
                               <TableCell className="text-center">
                                 {trade.closed_at && (
                                   <Badge
@@ -624,7 +580,7 @@ const Journal = () => {
                                 )}
                               </TableCell>
 
-                              {/* 4. Direction */}
+                              {/* 3. Direction */}
                               <TableCell className="text-center">
                                 <span
                                   className={cn(
@@ -636,6 +592,11 @@ const Journal = () => {
                                 >
                                   {trade.direction}
                                 </span>
+                              </TableCell>
+
+                              {/* 4. Instrument */}
+                              <TableCell className="font-bold text-white whitespace-nowrap">
+                                {trade.instrument}
                               </TableCell>
 
                               {/* 5. Opened */}
@@ -688,7 +649,7 @@ const Journal = () => {
 
                               {/* 11. Setup */}
                               <TableCell
-                                className="text-gray-400 truncate max-w-[120px] pl-4"
+                                className="text-gray-400 truncate max-w-[100px]"
                                 title={trade.setup_type || ""}
                               >
                                 {trade.setup_type || "-"}
@@ -742,12 +703,12 @@ const Journal = () => {
                     </Table>
                   </div>
 
-                  {/* Scroll Buttons */}
+                  {/* Horizontal scroll controls (only show when needed) */}
                   {canScrollLeft && (
                     <button
                       type="button"
                       onClick={() => scrollHorizontally("left")}
-                      className="absolute left-24 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/80 border border-white/15 flex items-center justify-center hover:bg-emerald-500/20 hover:border-emerald-500 transition-all z-40"
+                      className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/70 border border-white/15 flex items-center justify-center hover:bg-black/90"
                     >
                       <ChevronLeft className="w-4 h-4 text-gray-200" />
                     </button>
@@ -756,7 +717,7 @@ const Journal = () => {
                     <button
                       type="button"
                       onClick={() => scrollHorizontally("right")}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/80 border border-white/15 flex items-center justify-center hover:bg-emerald-500/20 hover:border-emerald-500 transition-all z-40"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/70 border border-white/15 flex items-center justify-center hover:bg-black/90"
                     >
                       <ChevronRight className="w-4 h-4 text-gray-200" />
                     </button>
@@ -792,7 +753,7 @@ const Journal = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Trade Details Modal */}
+      {/* Trade Details Modal (Triggered by View Column) */}
       <Dialog
         open={!!selectedTrade}
         onOpenChange={(open) => !open && setSelectedTrade(null)}
@@ -818,6 +779,7 @@ const Journal = () => {
 
           {selectedTrade && (
             <div className="space-y-6 py-4">
+              {/* P&L Big Display */}
               <div className="text-center p-4 bg-white/5 rounded-xl border border-white/5">
                 <div className="text-xs text-gray-500 uppercase tracking-widest mb-1">
                   Result
@@ -838,6 +800,7 @@ const Journal = () => {
                 </div>
               </div>
 
+              {/* Grid Details */}
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div className="space-y-1">
                   <div className="text-gray-500 text-xs">Opened</div>
