@@ -1,4 +1,3 @@
-// src/pages/Dashboard.tsx
 import {
   useState,
   useEffect,
@@ -55,7 +54,8 @@ import {
   Clock,
   Scale,
   Star,
-  Trophy,
+  Crown,
+  Medal,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -63,13 +63,7 @@ import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-// Shared MarketTicker component - Real-time WebSocket-based ticker
-import MarketTicker from "@/components/MarketTicker";
-
-// =====================================================================================
-// STYLES (Dashboard-specific animations)
-// =====================================================================================
-
+// --- STYLES (updated to use CSS variables so they react to theme) ---
 const DASHBOARD_STYLES = `
   .dash-float { animation: dash-float 6s ease-in-out infinite; }
   .dash-float-delayed { animation: dash-float 6s ease-in-out infinite; animation-delay: 2s; }
@@ -85,7 +79,6 @@ const DASHBOARD_STYLES = `
   @keyframes dash-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
   @keyframes dash-pulse { 0%, 100% { opacity: 0.5; transform: scale(1); } 50% { opacity: 0.8; transform: scale(1.05); } }
   @keyframes dash-glow { 0%, 100% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.3); } 50% { box-shadow: 0 0 40px rgba(16, 185, 129, 0.6); } }
-  @keyframes dash-shimmer { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
   @keyframes dash-slide-up { 0% { transform: translateY(20px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
   @keyframes dash-slide-right { 0% { transform: translateX(-20px); opacity: 0; } 100% { transform: translateX(0); opacity: 1; } }
   @keyframes dash-fade-in { 0% { opacity: 0; } 100% { opacity: 1; } }
@@ -93,12 +86,15 @@ const DASHBOARD_STYLES = `
   @keyframes dash-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
   
   .dash-glass {
+    /* Theme-aware glass surface */
     background-color: hsl(var(--card) / 0.85);
     backdrop-filter: blur(20px);
     border: 1px solid hsl(var(--border) / 0.6);
   }
   
-  .dash-card-hover { transition: all 0.3s ease; }
+  .dash-card-hover {
+    transition: all 0.3s ease;
+  }
   .dash-card-hover:hover {
     transform: translateY(-2px);
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
@@ -106,23 +102,24 @@ const DASHBOARD_STYLES = `
   }
   
   .dash-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-  .dash-scrollbar::-webkit-scrollbar-track { background: hsl(var(--muted) / 0.4); border-radius: 3px; }
-  .dash-scrollbar::-webkit-scrollbar-thumb { background: hsl(var(--primary) / 0.4); border-radius: 3px; }
+  .dash-scrollbar::-webkit-scrollbar-track {
+    background: hsl(var(--muted) / 0.4);
+    border-radius: 3px;
+  }
+  .dash-scrollbar::-webkit-scrollbar-thumb {
+    background: hsl(var(--primary) / 0.4);
+    border-radius: 3px;
+  }
   
   .hide-scrollbar::-webkit-scrollbar { display: none; }
   .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   
   @media (prefers-reduced-motion: reduce) {
-    .dash-float, .dash-float-delayed, .dash-pulse, .dash-glow, .dash-bounce, .dash-shimmer { 
-      animation: none !important; 
-    }
+    .dash-float, .dash-pulse, .dash-glow, .dash-bounce { animation: none !important; }
   }
 `;
 
-// =====================================================================================
-// TYPES
-// =====================================================================================
-
+// --- TYPES ---
 interface Trade {
   id: string;
   symbol: string;
@@ -174,19 +171,16 @@ interface UserProfile {
 interface TraderLevel {
   level: number;
   name: string;
-  minTrades: number;
-  minWinRate: number;
-  minProfitFactor: number;
-  requiresProfit: boolean;
+  icon: typeof Star;
   color: string;
   bgColor: string;
-  icon: typeof Star;
+  borderColor: string;
+  xpCurrent: number;
+  xpRequired: number;
+  progress: number;
 }
 
-// =====================================================================================
-// UTILITY FUNCTIONS
-// =====================================================================================
-
+// --- UTILS ---
 const formatCurrency = (value: number): string => {
   const absValue = Math.abs(value);
   if (absValue >= 1_000_000)
@@ -220,6 +214,7 @@ const formatDuration = (ms: number): string => {
   return `${seconds}s`;
 };
 
+// Helper to extract user's display name
 const getUserDisplayName = (
   profile: UserProfile | null,
   userMetadata: Record<string, any> | undefined
@@ -240,155 +235,63 @@ const getUserDisplayName = (
   return "Trader";
 };
 
-// =====================================================================================
-// TRADER LEVELS CONFIGURATION
-// =====================================================================================
+// Calculate Trader Level based on stats
+const calculateTraderLevel = (stats: DashboardStats): TraderLevel => {
+  const { totalTrades, winRate, profitFactor, totalPnL, streak } = stats;
+  const winRateNum = parseFloat(winRate);
 
-const TRADER_LEVELS: TraderLevel[] = [
-  {
-    level: 1,
-    name: "Beginner",
-    minTrades: 0,
-    minWinRate: 0,
-    minProfitFactor: 0,
-    requiresProfit: false,
-    color: "text-slate-400",
-    bgColor: "bg-slate-500",
-    icon: Star,
-  },
-  {
-    level: 2,
-    name: "Novice",
-    minTrades: 10,
-    minWinRate: 40,
-    minProfitFactor: 0,
-    requiresProfit: false,
-    color: "text-zinc-400",
-    bgColor: "bg-zinc-500",
-    icon: Star,
-  },
-  {
-    level: 3,
-    name: "Apprentice",
-    minTrades: 25,
-    minWinRate: 45,
-    minProfitFactor: 0.8,
-    requiresProfit: false,
-    color: "text-amber-600",
-    bgColor: "bg-amber-600",
-    icon: Star,
-  },
-  {
-    level: 4,
-    name: "Intermediate",
-    minTrades: 50,
-    minWinRate: 50,
-    minProfitFactor: 1.0,
-    requiresProfit: false,
-    color: "text-amber-500",
-    bgColor: "bg-amber-500",
-    icon: Award,
-  },
-  {
-    level: 5,
-    name: "Advanced",
-    minTrades: 100,
-    minWinRate: 52,
-    minProfitFactor: 1.2,
-    requiresProfit: true,
-    color: "text-emerald-400",
-    bgColor: "bg-emerald-500",
-    icon: Award,
-  },
-  {
-    level: 6,
-    name: "Expert",
-    minTrades: 200,
-    minWinRate: 55,
-    minProfitFactor: 1.5,
-    requiresProfit: true,
-    color: "text-blue-400",
-    bgColor: "bg-blue-500",
-    icon: Trophy,
-  },
-  {
-    level: 7,
-    name: "Master",
-    minTrades: 500,
-    minWinRate: 58,
-    minProfitFactor: 1.8,
-    requiresProfit: true,
-    color: "text-purple-400",
-    bgColor: "bg-purple-500",
-    icon: Trophy,
-  },
-  {
-    level: 8,
-    name: "Elite",
-    minTrades: 1000,
-    minWinRate: 60,
-    minProfitFactor: 2.0,
-    requiresProfit: true,
-    color: "text-yellow-400",
-    bgColor: "bg-gradient-to-r from-yellow-500 to-amber-500",
-    icon: Trophy,
-  },
-];
+  // XP calculation based on various factors
+  let xp = 0;
+  xp += totalTrades * 10; // 10 XP per trade
+  xp += winRateNum * 5; // 5 XP per win rate percentage
+  xp += Math.max(0, profitFactor * 100); // 100 XP per profit factor point
+  xp += Math.max(0, totalPnL / 10); // 0.1 XP per dollar profit
+  xp += streak * 25; // 25 XP per streak
 
-const getTraderLevel = (
-  totalTrades: number,
-  winRate: number,
-  profitFactor: number,
-  totalPnL: number
-): { currentLevel: TraderLevel; nextLevel: TraderLevel | null; progress: number } => {
-  let currentLevelIndex = 0;
-  
-  for (let i = TRADER_LEVELS.length - 1; i >= 0; i--) {
-    const level = TRADER_LEVELS[i];
-    const meetsTradeReq = totalTrades >= level.minTrades;
-    const meetsWinRateReq = winRate >= level.minWinRate;
-    const meetsPFReq = profitFactor >= level.minProfitFactor;
-    const meetsProfitReq = !level.requiresProfit || totalPnL > 0;
-    
-    if (meetsTradeReq && meetsWinRateReq && meetsPFReq && meetsProfitReq) {
-      currentLevelIndex = i;
+  // Level thresholds
+  const levels = [
+    { level: 1, name: "Beginner", xp: 0, icon: Star, color: "text-gray-400", bgColor: "bg-gray-500/20", borderColor: "border-gray-500/30" },
+    { level: 2, name: "Novice", xp: 500, icon: Star, color: "text-green-400", bgColor: "bg-green-500/20", borderColor: "border-green-500/30" },
+    { level: 3, name: "Apprentice", xp: 1500, icon: Star, color: "text-blue-400", bgColor: "bg-blue-500/20", borderColor: "border-blue-500/30" },
+    { level: 4, name: "Intermediate", xp: 3500, icon: Medal, color: "text-purple-400", bgColor: "bg-purple-500/20", borderColor: "border-purple-500/30" },
+    { level: 5, name: "Advanced", xp: 7000, icon: Medal, color: "text-orange-400", bgColor: "bg-orange-500/20", borderColor: "border-orange-500/30" },
+    { level: 6, name: "Expert", xp: 12000, icon: Award, color: "text-yellow-400", bgColor: "bg-yellow-500/20", borderColor: "border-yellow-500/30" },
+    { level: 7, name: "Master", xp: 20000, icon: Award, color: "text-pink-400", bgColor: "bg-pink-500/20", borderColor: "border-pink-500/30" },
+    { level: 8, name: "Grandmaster", xp: 35000, icon: Crown, color: "text-cyan-400", bgColor: "bg-cyan-500/20", borderColor: "border-cyan-500/30" },
+    { level: 9, name: "Legend", xp: 60000, icon: Crown, color: "text-emerald-400", bgColor: "bg-emerald-500/20", borderColor: "border-emerald-500/30" },
+    { level: 10, name: "Elite", xp: 100000, icon: Crown, color: "text-amber-400", bgColor: "bg-gradient-to-r from-amber-500/20 to-yellow-500/20", borderColor: "border-amber-500/50" },
+  ];
+
+  // Find current level
+  let currentLevel = levels[0];
+  let nextLevel = levels[1];
+
+  for (let i = levels.length - 1; i >= 0; i--) {
+    if (xp >= levels[i].xp) {
+      currentLevel = levels[i];
+      nextLevel = levels[i + 1] || levels[i];
       break;
     }
   }
-  
-  const currentLevel = TRADER_LEVELS[currentLevelIndex];
-  const nextLevel =
-    currentLevelIndex < TRADER_LEVELS.length - 1
-      ? TRADER_LEVELS[currentLevelIndex + 1]
-      : null;
-      
-  let progress = 100;
-  
-  if (nextLevel) {
-    const tradeProgress =
-      nextLevel.minTrades > 0
-        ? Math.min(100, (totalTrades / nextLevel.minTrades) * 100)
-        : 100;
-    const winRateProgress =
-      nextLevel.minWinRate > 0
-        ? Math.min(100, (winRate / nextLevel.minWinRate) * 100)
-        : 100;
-    const pfProgress =
-      nextLevel.minProfitFactor > 0
-        ? Math.min(100, (profitFactor / nextLevel.minProfitFactor) * 100)
-        : 100;
-    const profitProgress = !nextLevel.requiresProfit || totalPnL > 0 ? 100 : 0;
-    
-    progress = (tradeProgress + winRateProgress + pfProgress + profitProgress) / 4;
-  }
-  
-  return { currentLevel, nextLevel, progress };
+
+  const xpInCurrentLevel = xp - currentLevel.xp;
+  const xpRequiredForNext = nextLevel.xp - currentLevel.xp;
+  const progress = xpRequiredForNext > 0 ? (xpInCurrentLevel / xpRequiredForNext) * 100 : 100;
+
+  return {
+    level: currentLevel.level,
+    name: currentLevel.name,
+    icon: currentLevel.icon,
+    color: currentLevel.color,
+    bgColor: currentLevel.bgColor,
+    borderColor: currentLevel.borderColor,
+    xpCurrent: Math.floor(xp),
+    xpRequired: nextLevel.xp,
+    progress: Math.min(progress, 100),
+  };
 };
 
-// =====================================================================================
-// CUSTOM HOOKS
-// =====================================================================================
-
+// --- HOOKS ---
 const useAnimatedCounter = (
   end: number,
   duration: number = 1500,
@@ -396,32 +299,30 @@ const useAnimatedCounter = (
 ) => {
   const [count, setCount] = useState(0);
   const countRef = useRef(0);
-  
+
   useEffect(() => {
     const start = countRef.current;
     const startTime = Date.now();
-    
+
     const animate = () => {
       const elapsed = Date.now() - startTime;
       const progress = Math.min(elapsed / duration, 1);
       const easeOut = 1 - Math.pow(1 - progress, 3);
       const current = start + (end - start) * easeOut;
-      
+
       setCount(Number(current.toFixed(decimals)));
       countRef.current = current;
-      
+
       if (progress < 1) requestAnimationFrame(animate);
     };
-    
+
     requestAnimationFrame(animate);
   }, [end, duration, decimals]);
-  
+
   return count;
 };
 
-// =====================================================================================
-// BACKGROUND COMPONENTS
-// =====================================================================================
+// --- COMPONENTS ---
 
 const FloatingOrbs = memo(() => (
   <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
@@ -439,28 +340,25 @@ const AnimatedGrid = memo(() => (
 ));
 AnimatedGrid.displayName = "AnimatedGrid";
 
-// =====================================================================================
-// STAT COMPONENTS
-// =====================================================================================
-
+// Profit Factor Mini Chart Component
 const ProfitFactorChart = memo(({ profitFactor }: { profitFactor: number }) => {
   const normalizedValue = Math.min(profitFactor, 3);
   const percentage = (normalizedValue / 3) * 100;
-  
+
   const getColor = () => {
     if (profitFactor >= 2) return "text-emerald-400";
     if (profitFactor >= 1.5) return "text-green-400";
     if (profitFactor >= 1) return "text-yellow-400";
     return "text-red-400";
   };
-  
+
   const getBarColor = () => {
     if (profitFactor >= 2) return "bg-emerald-500";
     if (profitFactor >= 1.5) return "bg-green-500";
     if (profitFactor >= 1) return "bg-yellow-500";
     return "bg-red-500";
   };
-  
+
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between">
@@ -473,32 +371,29 @@ const ProfitFactorChart = memo(({ profitFactor }: { profitFactor: number }) => {
       </div>
       <div className="h-1.5 sm:h-2 bg-muted/20 rounded-full overflow-hidden">
         <div
-          className={cn("h-full rounded-full transition-all duration-1000", getBarColor())}
+          className={cn(
+            "h-full rounded-full transition-all duration-1000",
+            getBarColor()
+          )}
           style={{ width: `${percentage}%` }}
         />
       </div>
       <div className="flex justify-between text-[8px] sm:text-[10px] text-muted-foreground">
-        <span>0</span><span>1</span><span>2</span><span>3+</span>
+        <span>0</span>
+        <span>1</span>
+        <span>2</span>
+        <span>3+</span>
       </div>
     </div>
   );
 });
 ProfitFactorChart.displayName = "ProfitFactorChart";
 
+// Traders Level Chart Component
 const TradersLevelChart = memo(({ stats }: { stats: DashboardStats }) => {
-  const { currentLevel, nextLevel, progress } = useMemo(
-    () =>
-      getTraderLevel(
-        stats.totalTrades,
-        parseFloat(stats.winRate),
-        stats.profitFactor,
-        stats.totalPnL
-      ),
-    [stats.totalTrades, stats.winRate, stats.profitFactor, stats.totalPnL]
-  );
-  
-  const LevelIcon = currentLevel.icon;
-  
+  const traderLevel = useMemo(() => calculateTraderLevel(stats), [stats]);
+  const LevelIcon = traderLevel.icon;
+
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between">
@@ -506,51 +401,43 @@ const TradersLevelChart = memo(({ stats }: { stats: DashboardStats }) => {
           Trader Level
         </span>
         <div className="flex items-center gap-1">
-          <LevelIcon
-            className={cn("w-3 h-3 sm:w-4 sm:h-4", currentLevel.color)}
-          />
-          <span
-            className={cn("text-xs sm:text-sm font-bold", currentLevel.color)}
-          >
-            Lv.{currentLevel.level}
+          <LevelIcon className={cn("w-3 h-3 sm:w-4 sm:h-4", traderLevel.color)} />
+          <span className={cn("text-xs sm:text-sm font-bold", traderLevel.color)}>
+            {traderLevel.level}
           </span>
         </div>
       </div>
-      <div className="flex items-center gap-2">
-        <div className="flex-1 h-1.5 sm:h-2 bg-muted/20 rounded-full overflow-hidden">
-          <div
-            className={cn(
-              "h-full rounded-full transition-all duration-1000",
-              currentLevel.bgColor
-            )}
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      </div>
-      <div className="flex items-center justify-between">
-        <span
+      <div className="h-1.5 sm:h-2 bg-muted/20 rounded-full overflow-hidden">
+        <div
           className={cn(
-            "text-[9px] sm:text-[11px] font-medium",
-            currentLevel.color
+            "h-full rounded-full transition-all duration-1000",
+            traderLevel.level >= 8
+              ? "bg-gradient-to-r from-cyan-500 to-emerald-500"
+              : traderLevel.level >= 6
+              ? "bg-gradient-to-r from-yellow-500 to-orange-500"
+              : traderLevel.level >= 4
+              ? "bg-gradient-to-r from-purple-500 to-pink-500"
+              : traderLevel.level >= 2
+              ? "bg-gradient-to-r from-green-500 to-blue-500"
+              : "bg-gray-500"
           )}
-        >
-          {currentLevel.name}
+          style={{ width: `${traderLevel.progress}%` }}
+        />
+      </div>
+      <div className="flex justify-between items-center">
+        <span className={cn("text-[8px] sm:text-[10px] font-medium", traderLevel.color)}>
+          {traderLevel.name}
         </span>
-        {nextLevel ? (
-          <span className="text-[8px] sm:text-[10px] text-muted-foreground">
-            {progress.toFixed(0)}% → {nextLevel.name}
-          </span>
-        ) : (
-          <span className="text-[8px] sm:text-[10px] text-yellow-400">
-            ★ Max Level
-          </span>
-        )}
+        <span className="text-[8px] sm:text-[10px] text-muted-foreground">
+          {traderLevel.xpCurrent.toLocaleString()} / {traderLevel.xpRequired.toLocaleString()} XP
+        </span>
       </div>
     </div>
   );
 });
 TradersLevelChart.displayName = "TradersLevelChart";
 
+// Stat Card
 const StatCard = memo(
   ({
     title,
@@ -599,8 +486,7 @@ const StatCard = memo(
         text: "text-red-400",
         glow: "shadow-red-500/20",
       },
-    } as const;
-    
+    };
     const colors = colorClasses[color];
 
     return (
@@ -693,10 +579,7 @@ const StatCard = memo(
 );
 StatCard.displayName = "StatCard";
 
-// =====================================================================================
-// WELCOME CARD
-// =====================================================================================
-
+// Welcome Card with Profit Factor Chart and Traders Level
 const WelcomeCard = memo(
   ({ userName, stats }: { userName: string; stats: DashboardStats }) => {
     const greeting = useMemo(() => {
@@ -709,9 +592,11 @@ const WelcomeCard = memo(
     const performanceMessage = useMemo(() => {
       if (stats.totalTrades === 0)
         return "Start logging trades to unlock performance insights.";
+
       const winRate = parseFloat(stats.winRate);
       const pnl = stats.totalPnL;
       const pf = stats.profitFactor;
+
       if (pnl > 0 && winRate >= 55 && pf >= 1.5)
         return "Outstanding performance! Your edge is working. Keep it up! 🔥";
       if (pnl > 0 && winRate >= 50)
@@ -724,6 +609,7 @@ const WelcomeCard = memo(
         return "Focus on cutting losses quickly and letting winners run.";
       if (pnl < 0)
         return "Markets are challenging. Stick to your plan and manage risk carefully.";
+
       return "Consistency is key. Stay disciplined with your trading plan.";
     }, [stats]);
 
@@ -734,18 +620,21 @@ const WelcomeCard = memo(
       return day >= 1 && day <= 5 && hour >= 9 && hour <= 21;
     }, []);
 
+    // Extract first name for a more personal greeting
     const firstName = useMemo(() => {
       const name = userName.trim();
       const firstPart = name.split(" ")[0];
       return firstPart || "Trader";
     }, [userName]);
 
+    const traderLevel = useMemo(() => calculateTraderLevel(stats), [stats]);
+
     return (
       <Card className="dash-glass dash-card-hover relative overflow-hidden h-full">
         <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-blue-500/5 to-purple-500/10" />
         <div className="absolute top-0 right-0 w-40 sm:w-64 h-40 sm:h-64 bg-emerald-500/10 rounded-full blur-[60px] sm:blur-[80px] dash-float" />
         <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-blue-500 to-purple-500 opacity-50" />
-        
+
         <CardContent className="relative z-10 p-4 sm:p-6">
           <div className="flex flex-col gap-4 sm:gap-6">
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
@@ -767,7 +656,7 @@ const WelcomeCard = memo(
                     {performanceMessage}
                   </p>
                 </div>
-                
+
                 <div className="flex flex-wrap items-center gap-2 sm:gap-4">
                   <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
                     <div
@@ -797,10 +686,24 @@ const WelcomeCard = memo(
                       {stats.streak} win streak
                     </span>
                   </div>
+                  {/* Trader Level Badge */}
+                  <div
+                    className={cn(
+                      "flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border",
+                      traderLevel.bgColor,
+                      traderLevel.borderColor
+                    )}
+                  >
+                    <traderLevel.icon
+                      className={cn("w-2.5 h-2.5 sm:w-3 sm:h-3", traderLevel.color)}
+                    />
+                    <span className={cn("text-[10px] sm:text-xs font-medium", traderLevel.color)}>
+                      Lvl {traderLevel.level} {traderLevel.name}
+                    </span>
+                  </div>
                 </div>
               </div>
-              
-              {/* Desktop Stats */}
+
               <div className="hidden sm:flex flex-col items-center gap-3 flex-shrink-0">
                 <div className="relative">
                   <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-emerald-500/20 to-blue-500/20 flex items-center justify-center">
@@ -837,14 +740,14 @@ const WelcomeCard = memo(
                     )}
                   </div>
                 </div>
+
                 <div className="w-28 sm:w-32 space-y-2">
                   <ProfitFactorChart profitFactor={stats.profitFactor} />
                   <TradersLevelChart stats={stats} />
                 </div>
               </div>
             </div>
-            
-            {/* Mobile Stats */}
+
             <div className="sm:hidden flex items-center justify-center gap-6">
               <div className="relative">
                 <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-500/20 to-blue-500/20 flex items-center justify-center">
@@ -894,21 +797,20 @@ const WelcomeCard = memo(
 );
 WelcomeCard.displayName = "WelcomeCard";
 
-// =====================================================================================
-// PERFORMANCE CHART
-// =====================================================================================
-
+// Performance Chart
 const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const [timeframe, setTimeframe] = useState<"1W" | "1M" | "3M" | "YTD" | "ALL">("1M");
+  const [timeframe, setTimeframe] = useState<
+    "1W" | "1M" | "3M" | "YTD" | "ALL"
+  >("1M");
   const chartRef = useRef<HTMLDivElement>(null);
 
   const chartData = useMemo(() => {
     if (trades.length === 0) return [];
-    
+
     const now = new Date();
     let startDate = new Date();
-    
+
     if (timeframe === "1W") startDate.setDate(now.getDate() - 7);
     else if (timeframe === "1M") startDate.setMonth(now.getMonth() - 1);
     else if (timeframe === "3M") startDate.setMonth(now.getMonth() - 3);
@@ -925,11 +827,14 @@ const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
           new Date(a.closed_at || a.opened_at).getTime() -
           new Date(b.closed_at || b.opened_at).getTime()
       );
-      
+
     if (filteredTrades.length === 0) return [];
 
-    const dailyMap = new Map<string, { pnl: number; date: Date; dateStr: string }>();
-    
+    const dailyMap = new Map<
+      string,
+      { pnl: number; date: Date; dateStr: string }
+    >();
+
     filteredTrades.forEach((t) => {
       const dateObj = new Date(t.closed_at || t.opened_at);
       const dateKey = dateObj.toISOString().split("T")[0];
@@ -937,11 +842,10 @@ const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
         month: "short",
         day: "numeric",
       });
-      
+
       if (!dailyMap.has(dateKey)) {
         dailyMap.set(dateKey, { pnl: 0, date: dateObj, dateStr });
       }
-      
       const dayData = dailyMap.get(dateKey)!;
       dayData.pnl += t.profit_loss_currency || 0;
     });
@@ -950,7 +854,7 @@ const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
     const sortedDays = Array.from(dailyMap.entries()).sort(
       (a, b) => a[1].date.getTime() - b[1].date.getTime()
     );
-    
+
     return sortedDays.map(([_, day]) => {
       cumulative += day.pnl;
       return {
@@ -965,7 +869,6 @@ const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
   const chartPath = useMemo(() => {
     if (chartData.length < 2)
       return { linePath: "", areaPath: "", points: [] as any[] };
-      
     const padding = 0;
     const width = 100;
     const height = 100;
@@ -973,30 +876,36 @@ const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
     const maxValue = Math.max(...values);
     const minValue = Math.min(...values);
     const range = maxValue - minValue || 1;
-    
+
     const points = chartData.map((d, i) => ({
       x: padding + (i / (chartData.length - 1)) * (width - 2 * padding),
-      y: height - padding - ((d.value - minValue) / range) * (height - 2 * padding),
+      y:
+        height -
+        padding -
+        ((d.value - minValue) / range) * (height - 2 * padding),
       data: d,
     }));
-    
+
     const linePath = points
       .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
       .join(" ");
-      
-    const areaPath = `${linePath} L ${points[points.length - 1].x} ${height} L ${points[0].x} ${height} Z`;
-    
+    const areaPath = `${linePath} L ${points[points.length - 1].x} ${height} L ${
+      points[0].x
+    } ${height} Z`;
+
     return { linePath, areaPath, points, maxValue, minValue };
   }, [chartData]);
 
-  const periodReturn = chartData.length > 0 ? chartData[chartData.length - 1].value : 0;
-  const bestDay = chartData.length > 0 ? Math.max(...chartData.map((d) => d.pnl)) : 0;
-  const worstDay = chartData.length > 0 ? Math.min(...chartData.map((d) => d.pnl)) : 0;
+  const periodReturn =
+    chartData.length > 0 ? chartData[chartData.length - 1].value : 0;
+  const bestDay =
+    chartData.length > 0 ? Math.max(...chartData.map((d) => d.pnl)) : 0;
+  const worstDay =
+    chartData.length > 0 ? Math.min(...chartData.map((d) => d.pnl)) : 0;
 
   return (
     <Card className="dash-glass dash-card-hover relative overflow-hidden h-full">
       <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-blue-500/5" />
-      
       <CardHeader className="relative z-10 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
         <div className="flex flex-col gap-3 sm:gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -1028,7 +937,6 @@ const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
           </div>
         </div>
       </CardHeader>
-      
       <CardContent className="relative z-10 pt-2 sm:pt-4 px-3 sm:px-6 pb-3 sm:pb-6">
         <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4 sm:mb-6">
           <div className="p-2 sm:p-3 rounded-lg bg-muted/20">
@@ -1061,7 +969,7 @@ const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
             </p>
           </div>
         </div>
-        
+
         <div className="relative h-48 sm:h-64" ref={chartRef}>
           {chartData.length >= 2 ? (
             <>
@@ -1078,7 +986,6 @@ const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
                   {formatCurrency(chartPath.minValue || 0)}
                 </span>
               </div>
-              
               <div className="ml-12 sm:ml-16 h-full relative">
                 <div className="absolute inset-0">
                   {[0, 1, 2, 3, 4].map((i) => (
@@ -1089,7 +996,6 @@ const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
                     />
                   ))}
                 </div>
-                
                 <svg
                   className="absolute inset-0 w-full h-full"
                   viewBox="0 0 100 100"
@@ -1152,7 +1058,6 @@ const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
                     />
                   ))}
                 </svg>
-                
                 <div className="absolute inset-0 flex">
                   {chartData.map((d, i) => (
                     <div
@@ -1205,18 +1110,14 @@ const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
 });
 PerformanceChart.displayName = "PerformanceChart";
 
-// =====================================================================================
-// RECENT TRADES
-// =====================================================================================
-
+// Recent Trades
 const RecentTrades = memo(({ trades }: { trades: Trade[] }) => {
   const navigate = useNavigate();
   const recentTrades = trades.slice(0, 5);
-  
+
   return (
     <Card className="dash-glass dash-card-hover relative overflow-hidden h-full">
       <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5" />
-      
       <CardHeader className="relative z-10 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
@@ -1239,7 +1140,6 @@ const RecentTrades = memo(({ trades }: { trades: Trade[] }) => {
           </Button>
         </div>
       </CardHeader>
-      
       <CardContent className="relative z-10 pt-2 sm:pt-4 px-3 sm:px-6 pb-3 sm:pb-6">
         <div className="space-y-2 sm:space-y-3">
           {recentTrades.length > 0 ? (
@@ -1309,10 +1209,7 @@ const RecentTrades = memo(({ trades }: { trades: Trade[] }) => {
 });
 RecentTrades.displayName = "RecentTrades";
 
-// =====================================================================================
-// QUICK ACTIONS
-// =====================================================================================
-
+// Quick Actions
 const QuickActions = memo(
   ({ onNavigate }: { onNavigate: (path: string) => void }) => {
     const actions = [
@@ -1342,18 +1239,16 @@ const QuickActions = memo(
         path: "/calendar",
       },
     ];
-    
+
     return (
       <Card className="dash-glass dash-card-hover relative overflow-hidden h-full">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-purple-500/8 to-pink-500/10" />
-        
         <CardHeader className="relative z-10 pb-2 px-3 sm:px-4 pt-3 sm:pt-4">
           <CardTitle className="text-sm sm:text-base text-foreground flex items-center gap-2">
             <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-400" />
             <span>Quick Actions</span>
           </CardTitle>
         </CardHeader>
-        
         <CardContent className="relative z-10 pt-1 sm:pt-2 pb-3 sm:pb-4 px-3 sm:px-4">
           <div className="grid grid-cols-2 gap-2 sm:gap-3">
             {actions.map((action, index) => (
@@ -1402,10 +1297,7 @@ const QuickActions = memo(
 );
 QuickActions.displayName = "QuickActions";
 
-// =====================================================================================
-// GOALS SETTINGS DIALOG
-// =====================================================================================
-
+// Goals Settings Dialog
 const GoalsSettingsDialog = memo(
   ({
     open,
@@ -1419,16 +1311,16 @@ const GoalsSettingsDialog = memo(
     onSave: (goals: UserGoals) => void;
   }) => {
     const [localGoals, setLocalGoals] = useState<UserGoals>(goals);
-    
+
     useEffect(() => {
       setLocalGoals(goals);
     }, [goals]);
-    
+
     const handleSave = () => {
       onSave(localGoals);
       onOpenChange(false);
     };
-    
+
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="bg-popover text-popover-foreground border border-border max-w-md">
@@ -1441,7 +1333,6 @@ const GoalsSettingsDialog = memo(
               Set your monthly trading targets to track your progress.
             </DialogDescription>
           </DialogHeader>
-          
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="pnl-goal" className="text-foreground">
@@ -1464,7 +1355,6 @@ const GoalsSettingsDialog = memo(
                 Your target profit for the month
               </p>
             </div>
-            
             <div className="space-y-2">
               <Label htmlFor="trades-goal" className="text-foreground">
                 Monthly Trades Goal
@@ -1486,7 +1376,6 @@ const GoalsSettingsDialog = memo(
                 Number of trades you aim to execute
               </p>
             </div>
-            
             <div className="space-y-2">
               <Label htmlFor="winrate-goal" className="text-foreground">
                 Win Rate Goal (%)
@@ -1514,7 +1403,6 @@ const GoalsSettingsDialog = memo(
               </p>
             </div>
           </div>
-          
           <DialogFooter className="gap-2">
             <Button
               variant="outline"
@@ -1539,17 +1427,16 @@ const GoalsSettingsDialog = memo(
 );
 GoalsSettingsDialog.displayName = "GoalsSettingsDialog";
 
-// =====================================================================================
-// TRADING GOALS
-// =====================================================================================
-
+// Trading Goals with Settings
 const TradingGoals = memo(
   ({
     stats,
+    trades,
     goals,
     onEditGoals,
   }: {
     stats: DashboardStats;
+    trades: Trade[];
     goals: UserGoals;
     onEditGoals: () => void;
   }) => {
@@ -1581,7 +1468,6 @@ const TradingGoals = memo(
     return (
       <Card className="dash-glass dash-card-hover relative overflow-hidden h-full">
         <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-red-500/5" />
-        
         <CardHeader className="relative z-10 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
           <div className="flex items-center justify-between gap-2">
             <CardTitle className="text-base sm:text-lg text-foreground flex items-center gap-2">
@@ -1598,7 +1484,6 @@ const TradingGoals = memo(
             </Button>
           </div>
         </CardHeader>
-        
         <CardContent className="relative z-10 pt-1 sm:pt-2 space-y-3 sm:space-y-4 px-3 sm:px-6 pb-3 sm:pb-6">
           {goalsData.map((goal) => {
             const progress =
@@ -1609,9 +1494,8 @@ const TradingGoals = memo(
               emerald: "bg-emerald-500",
               blue: "bg-blue-500",
               purple: "bg-purple-500",
-            } as const;
+            };
             const isComplete = progress >= 100;
-            
             return (
               <div key={goal.label} className="space-y-1.5 sm:space-y-2">
                 <div className="flex items-center justify-between text-xs sm:text-sm">
@@ -1659,10 +1543,7 @@ const TradingGoals = memo(
 );
 TradingGoals.displayName = "TradingGoals";
 
-// =====================================================================================
-// PERFORMANCE METRICS
-// =====================================================================================
-
+// Performance Metrics
 const PerformanceMetrics = memo(({ stats }: { stats: DashboardStats }) => {
   const metrics = [
     {
@@ -1718,14 +1599,12 @@ const PerformanceMetrics = memo(({ stats }: { stats: DashboardStats }) => {
   return (
     <Card className="dash-glass dash-card-hover relative overflow-hidden h-full">
       <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-teal-500/5" />
-      
       <CardHeader className="relative z-10 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
         <CardTitle className="text-base sm:text-lg text-foreground flex items-center gap-2">
           <PieChart className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
           <span className="truncate">Performance Metrics</span>
         </CardTitle>
       </CardHeader>
-      
       <CardContent className="relative z-10 pt-1 sm:pt-2 px-3 sm:px-6 pb-3 sm:pb-6">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
           {metrics.map((metric) => (
@@ -1769,10 +1648,154 @@ const PerformanceMetrics = memo(({ stats }: { stats: DashboardStats }) => {
 });
 PerformanceMetrics.displayName = "PerformanceMetrics";
 
-// =====================================================================================
-// MAIN DASHBOARD COMPONENT
-// =====================================================================================
+// Traders Level Card Component
+const TradersLevelCard = memo(({ stats }: { stats: DashboardStats }) => {
+  const traderLevel = useMemo(() => calculateTraderLevel(stats), [stats]);
+  const LevelIcon = traderLevel.icon;
 
+  const levelBenefits = useMemo(() => {
+    const benefits = {
+      1: ["Basic analytics", "Trade logging"],
+      2: ["Win rate tracking", "P&L charts"],
+      3: ["Advanced metrics", "Strategy tagging"],
+      4: ["Custom playbooks", "Pattern recognition"],
+      5: ["Risk analytics", "Performance insights"],
+      6: ["Expert reports", "Trade optimization"],
+      7: ["Master strategies", "AI suggestions"],
+      8: ["Premium features", "Priority support"],
+      9: ["Legend status", "Exclusive content"],
+      10: ["Elite badge", "All features unlocked"],
+    };
+    return benefits[traderLevel.level as keyof typeof benefits] || benefits[1];
+  }, [traderLevel.level]);
+
+  return (
+    <Card className="dash-glass dash-card-hover relative overflow-hidden h-full">
+      <div
+        className={cn(
+          "absolute inset-0 bg-gradient-to-br",
+          traderLevel.level >= 8
+            ? "from-cyan-500/10 to-emerald-500/10"
+            : traderLevel.level >= 6
+            ? "from-yellow-500/10 to-orange-500/10"
+            : traderLevel.level >= 4
+            ? "from-purple-500/10 to-pink-500/10"
+            : "from-green-500/10 to-blue-500/10"
+        )}
+      />
+      <CardHeader className="relative z-10 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+        <CardTitle className="text-base sm:text-lg text-foreground flex items-center gap-2">
+          <LevelIcon className={cn("w-4 h-4 sm:w-5 sm:h-5", traderLevel.color)} />
+          <span className="truncate">Trader Level</span>
+        </CardTitle>
+        <CardDescription className="text-xs sm:text-sm text-muted-foreground">
+          Your trading experience rank
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="relative z-10 pt-1 sm:pt-2 px-3 sm:px-6 pb-3 sm:pb-6">
+        <div className="flex flex-col gap-4">
+          {/* Level Display */}
+          <div className="flex items-center gap-4">
+            <div
+              className={cn(
+                "w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center",
+                traderLevel.bgColor,
+                "border-2",
+                traderLevel.borderColor
+              )}
+            >
+              <div className="text-center">
+                <LevelIcon className={cn("w-6 h-6 sm:w-8 sm:h-8 mx-auto", traderLevel.color)} />
+                <span className={cn("text-lg sm:text-xl font-bold", traderLevel.color)}>
+                  {traderLevel.level}
+                </span>
+              </div>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className={cn("text-lg sm:text-xl font-bold", traderLevel.color)}>
+                {traderLevel.name}
+              </h3>
+              <p className="text-xs sm:text-sm text-muted-foreground">
+                {traderLevel.xpCurrent.toLocaleString()} XP earned
+              </p>
+              {/* Progress to next level */}
+              <div className="mt-2">
+                <div className="flex justify-between text-[10px] sm:text-xs text-muted-foreground mb-1">
+                  <span>Progress to Level {traderLevel.level + 1}</span>
+                  <span>{traderLevel.progress.toFixed(0)}%</span>
+                </div>
+                <div className="h-2 bg-muted/20 rounded-full overflow-hidden">
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-all duration-1000",
+                      traderLevel.level >= 8
+                        ? "bg-gradient-to-r from-cyan-500 to-emerald-500"
+                        : traderLevel.level >= 6
+                        ? "bg-gradient-to-r from-yellow-500 to-orange-500"
+                        : traderLevel.level >= 4
+                        ? "bg-gradient-to-r from-purple-500 to-pink-500"
+                        : "bg-gradient-to-r from-green-500 to-blue-500"
+                    )}
+                    style={{ width: `${traderLevel.progress}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1 text-right">
+                  {(traderLevel.xpRequired - traderLevel.xpCurrent).toLocaleString()} XP to next level
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Level Benefits */}
+          <div className="space-y-2">
+            <p className="text-xs sm:text-sm font-medium text-muted-foreground">
+              Current Level Benefits:
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {levelBenefits.map((benefit, index) => (
+                <div
+                  key={index}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] sm:text-xs",
+                    traderLevel.bgColor,
+                    "border",
+                    traderLevel.borderColor
+                  )}
+                >
+                  <Sparkles className={cn("w-3 h-3", traderLevel.color)} />
+                  <span className={traderLevel.color}>{benefit}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* XP Breakdown */}
+          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border/40">
+            <div className="text-center p-2 rounded-lg bg-muted/10">
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Trades XP</p>
+              <p className="text-sm font-bold text-foreground">{(stats.totalTrades * 10).toLocaleString()}</p>
+            </div>
+            <div className="text-center p-2 rounded-lg bg-muted/10">
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Win Rate XP</p>
+              <p className="text-sm font-bold text-foreground">{(parseFloat(stats.winRate) * 5).toFixed(0)}</p>
+            </div>
+            <div className="text-center p-2 rounded-lg bg-muted/10">
+              <p className="text-[10px] sm:text-xs text-muted-foreground">PF XP</p>
+              <p className="text-sm font-bold text-foreground">{Math.max(0, stats.profitFactor * 100).toFixed(0)}</p>
+            </div>
+            <div className="text-center p-2 rounded-lg bg-muted/10">
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Streak XP</p>
+              <p className="text-sm font-bold text-foreground">{(stats.streak * 25).toLocaleString()}</p>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+TradersLevelCard.displayName = "TradersLevelCard";
+
+// --- MAIN DASHBOARD ---
 const Dashboard = () => {
   const navigate = useNavigate();
   const stylesInjected = useRef(false);
@@ -1785,55 +1808,57 @@ const Dashboard = () => {
     win_rate_goal: 60,
   });
 
-  // Inject dashboard-specific styles
   useEffect(() => {
     if (!stylesInjected.current) {
-      const existingStyle = document.getElementById("dashboard-animations");
-      if (existingStyle) existingStyle.remove();
-      
       const styleSheet = document.createElement("style");
       styleSheet.id = "dashboard-animations";
       styleSheet.textContent = DASHBOARD_STYLES;
       document.head.appendChild(styleSheet);
       stylesInjected.current = true;
     }
-    
     setIsLoaded(true);
 
     const getUserProfile = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       if (user) {
+        // Try to fetch profile from profiles table
         let profile: UserProfile | null = null;
-        
+
         try {
           const { data: profileData, error } = await supabase
             .from("profiles")
-            .select("id, display_name, full_name, first_name, last_name, username")
+            .select(
+              "id, display_name, full_name, first_name, last_name, username"
+            )
             .eq("id", user.id)
-            .maybeSingle();
-            
+            .single();
+
           if (!error && profileData) {
             profile = profileData as UserProfile;
           }
-        } catch {
+        } catch (e) {
+          // Profile table might not exist or have different columns
           console.log("Could not fetch profile from profiles table");
         }
 
+        // Get display name using helper function
         const displayName = getUserDisplayName(profile, user.user_metadata);
         setUserName(displayName);
 
+        // Load saved goals
         const savedGoals = localStorage.getItem(`trading_goals_${user.id}`);
         if (savedGoals) {
           try {
             setUserGoals(JSON.parse(savedGoals));
-          } catch {
+          } catch (e) {
             console.error("Failed to parse saved goals");
           }
         }
       }
     };
-
     getUserProfile();
 
     return () => {
@@ -1843,8 +1868,9 @@ const Dashboard = () => {
   }, []);
 
   const handleSaveGoals = useCallback(async (newGoals: UserGoals) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (user) {
       localStorage.setItem(
         `trading_goals_${user.id}`,
@@ -1855,7 +1881,6 @@ const Dashboard = () => {
     }
   }, []);
 
-  // Fetch trades
   const { data: trades = [], refetch } = useQuery({
     queryKey: ["trades"],
     queryFn: async () => {
@@ -1863,25 +1888,35 @@ const Dashboard = () => {
         .from("trades")
         .select("*")
         .order("closed_at", { ascending: false });
-        
       if (error) throw error;
       return data as unknown as Trade[];
     },
   });
 
-  // Calculate stats
   const stats = useMemo((): DashboardStats => {
     const totalTrades = trades.length;
-    const winningTrades = trades.filter((t) => (t.profit_loss_currency || 0) > 0);
+    const winningTrades = trades.filter(
+      (t) => (t.profit_loss_currency || 0) > 0
+    );
     const wins = winningTrades.length;
-    const losingTrades = trades.filter((t) => (t.profit_loss_currency || 0) < 0);
+    const losingTrades = trades.filter(
+      (t) => (t.profit_loss_currency || 0) < 0
+    );
     const losses = losingTrades.length;
-    const breakEvenTrades = trades.filter((t) => (t.profit_loss_currency || 0) === 0);
+    const breakEvenTrades = trades.filter(
+      (t) => (t.profit_loss_currency || 0) === 0
+    );
     const breakEven = breakEvenTrades.length;
     const decisiveTrades = wins + losses;
-    const totalPnL = trades.reduce((sum, t) => sum + (t.profit_loss_currency || 0), 0);
+    const totalPnL = trades.reduce(
+      (sum, t) => sum + (t.profit_loss_currency || 0),
+      0
+    );
     const winRate = decisiveTrades > 0 ? (wins / decisiveTrades) * 100 : 0;
-    const totalWinAmount = winningTrades.reduce((sum, t) => sum + (t.profit_loss_currency || 0), 0);
+    const totalWinAmount = winningTrades.reduce(
+      (sum, t) => sum + (t.profit_loss_currency || 0),
+      0
+    );
     const avgWin = wins > 0 ? totalWinAmount / wins : 0;
     const totalLossAmount = Math.abs(
       losingTrades.reduce((sum, t) => sum + (t.profit_loss_currency || 0), 0)
@@ -1897,11 +1932,11 @@ const Dashboard = () => {
     const allPnL = trades.map((t) => t.profit_loss_currency || 0);
     const bestTrade = allPnL.length > 0 ? Math.max(...allPnL) : 0;
     const worstTrade = allPnL.length > 0 ? Math.min(...allPnL) : 0;
+
     const avgRiskReward = avgLoss > 0 ? Math.abs(avgWin / avgLoss) : 0;
 
     let totalDuration = 0;
     let closedTradeCount = 0;
-    
     trades.forEach((t) => {
       if (t.closed_at && t.opened_at) {
         const start = new Date(t.opened_at).getTime();
@@ -1913,8 +1948,8 @@ const Dashboard = () => {
         }
       }
     });
-    
-    const avgDurationMs = closedTradeCount > 0 ? totalDuration / closedTradeCount : 0;
+    const avgDurationMs =
+      closedTradeCount > 0 ? totalDuration / closedTradeCount : 0;
     const avgTradeDuration = formatDuration(avgDurationMs);
 
     const now = new Date();
@@ -1922,9 +1957,14 @@ const Dashboard = () => {
     const currentYear = now.getFullYear();
     const thisMonthTrades = trades.filter((t) => {
       const date = new Date(t.closed_at || t.opened_at);
-      return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+      return (
+        date.getMonth() === currentMonth && date.getFullYear() === currentYear
+      );
     });
-    const monthlyPnL = thisMonthTrades.reduce((sum, t) => sum + (t.profit_loss_currency || 0), 0);
+    const monthlyPnL = thisMonthTrades.reduce(
+      (sum, t) => sum + (t.profit_loss_currency || 0),
+      0
+    );
     const monthlyTrades = thisMonthTrades.length;
 
     let streak = 0;
@@ -1964,14 +2004,20 @@ const Dashboard = () => {
     };
   }, [trades]);
 
-  // Animated counters
-  const animatedWinRate = useAnimatedCounter(parseFloat(stats.winRate), 1500, 1);
+  const animatedWinRate = useAnimatedCounter(
+    parseFloat(stats.winRate),
+    1500,
+    1
+  );
   const animatedPnL = useAnimatedCounter(stats.totalPnL, 1500, 2);
   const animatedTrades = useAnimatedCounter(stats.totalTrades, 1500);
 
-  const handleNavigate = useCallback((path: string) => {
-    navigate(path);
-  }, [navigate]);
+  const handleNavigate = useCallback(
+    (path: string) => {
+      navigate(path);
+    },
+    [navigate]
+  );
 
   const handleRefresh = useCallback(() => {
     refetch();
@@ -1980,37 +2026,20 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground relative overflow-x-hidden">
-      {/* 
-        ═══════════════════════════════════════════════════════════════════════════════
-        MARKET TICKER - Real-time WebSocket-based ticker (same as Auth page)
-        - Connects to Binance WebSocket for crypto
-        - Connects to Finnhub WebSocket for stocks
-        - REST APIs for forex and commodities
-        - Singleton pattern prevents duplicate connections
-        ═══════════════════════════════════════════════════════════════════════════════
-      */}
-      <MarketTicker />
-
-      {/* Background Effects */}
       <FloatingOrbs />
       <AnimatedGrid />
-
-      {/* Goals Dialog */}
       <GoalsSettingsDialog
         open={goalsDialogOpen}
         onOpenChange={setGoalsDialogOpen}
         goals={userGoals}
         onSave={handleSaveGoals}
       />
-
-      {/* Main Content - pt-10 accounts for the fixed ticker height (h-9 sm:h-10) */}
       <div
         className={cn(
-          "relative z-10 pt-12 sm:pt-14 pb-6 sm:pb-8 px-3 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full transition-all duration-700",
+          "relative z-10 pt-4 sm:pt-6 pb-6 sm:pb-8 px-3 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full transition-all duration-700",
           isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
         )}
       >
-        {/* Header */}
         <div className="flex items-center justify-between mb-6 sm:mb-8 gap-3">
           <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
             <div className="relative flex-shrink-0">
@@ -2027,7 +2056,6 @@ const Dashboard = () => {
               </p>
             </div>
           </div>
-          
           <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
             <Button
               variant="outline"
@@ -2055,9 +2083,11 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Welcome + Quick Actions Row */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6 mb-4 sm:mb-6">
-          <div className="lg:col-span-2 dash-slide-up" style={{ animationDelay: "0ms" }}>
+          <div
+            className="lg:col-span-2 dash-slide-up"
+            style={{ animationDelay: "0ms" }}
+          >
             <WelcomeCard userName={userName} stats={stats} />
           </div>
           <div className="dash-slide-up" style={{ animationDelay: "50ms" }}>
@@ -2065,10 +2095,11 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Stats Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
-          {/* Total P&L */}
-          <div className="col-span-1 sm:col-span-2 dash-slide-up" style={{ animationDelay: "100ms" }}>
+          <div
+            className="col-span-1 sm:col-span-2 dash-slide-up"
+            style={{ animationDelay: "100ms" }}
+          >
             <StatCard
               title="Total P&L"
               value={formatCurrency(animatedPnL)}
@@ -2080,127 +2111,10 @@ const Dashboard = () => {
               size="large"
             />
           </div>
-          
-          {/* Win Rate */}
-          <div className="col-span-1 sm:col-span-2 dash-slide-up" style={{ animationDelay: "150ms" }}>
+          <div
+            className="col-span-1 sm:col-span-2 dash-slide-up"
+            style={{ animationDelay: "150ms" }}
+          >
             <StatCard
               title="Win Rate"
-              value={`${animatedWinRate}%`}
-              icon={Target}
-              trend={parseFloat(stats.winRate) >= 50 ? "up" : "down"}
-              trendValue={`${stats.wins}W / ${stats.losses}L`}
-              subtitle={
-                stats.breakEven > 0
-                  ? `Excl. ${stats.breakEven} BE`
-                  : "Wins / (Wins + Losses)"
-              }
-              color="blue"
-              size="large"
-            />
-          </div>
-          
-          {/* Total Trades */}
-          <div className="dash-slide-up" style={{ animationDelay: "200ms" }}>
-            <StatCard
-              title="Total Trades"
-              value={animatedTrades}
-              icon={Activity}
-              trend="neutral"
-              subtitle={
-                stats.breakEven > 0
-                  ? `${stats.breakEven} break-even`
-                  : "All time"
-              }
-              color="purple"
-            />
-          </div>
-          
-          {/* Profit Factor */}
-          <div className="dash-slide-up" style={{ animationDelay: "250ms" }}>
-            <StatCard
-              title="Profit Factor"
-              value={stats.profitFactor.toFixed(2)}
-              icon={TrendingUp}
-              trend={
-                stats.profitFactor >= 1.5
-                  ? "up"
-                  : stats.profitFactor >= 1
-                  ? "neutral"
-                  : "down"
-              }
-              subtitle="Gross profit ÷ loss"
-              color={stats.profitFactor >= 1.5 ? "emerald" : "orange"}
-            />
-          </div>
-          
-          {/* Current Streak */}
-          <div className="dash-slide-up" style={{ animationDelay: "300ms" }}>
-            <StatCard
-              title="Current Streak"
-              value={stats.streak}
-              icon={Flame}
-              trend={stats.streak > 0 ? "up" : "neutral"}
-              subtitle="Consecutive wins"
-              color="orange"
-            />
-          </div>
-          
-          {/* Expectancy */}
-          <div className="dash-slide-up" style={{ animationDelay: "350ms" }}>
-            <StatCard
-              title="Expectancy"
-              value={formatCurrency(stats.expectancy)}
-              icon={Zap}
-              trend={stats.expectancy >= 0 ? "up" : "down"}
-              subtitle="Avg P&L per trade"
-              color={stats.expectancy >= 0 ? "emerald" : "red"}
-            />
-          </div>
-
-          {/* Performance Chart */}
-          <div className="col-span-1 sm:col-span-2 lg:col-span-4 dash-slide-up" style={{ animationDelay: "400ms" }}>
-            <PerformanceChart trades={trades} />
-          </div>
-
-          {/* Recent Trades */}
-          <div className="col-span-1 sm:col-span-2 lg:col-span-4 dash-slide-up" style={{ animationDelay: "450ms" }}>
-            <RecentTrades trades={trades} />
-          </div>
-
-          {/* Trading Goals */}
-          <div className="col-span-1 sm:col-span-1 lg:col-span-2 dash-slide-up" style={{ animationDelay: "500ms" }}>
-            <TradingGoals
-              stats={stats}
-              goals={userGoals}
-              onEditGoals={() => setGoalsDialogOpen(true)}
-            />
-          </div>
-
-          {/* Performance Metrics */}
-          <div className="col-span-1 sm:col-span-1 lg:col-span-2 dash-slide-up" style={{ animationDelay: "550ms" }}>
-            <PerformanceMetrics stats={stats} />
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-border/40 flex flex-col sm:flex-row items-center justify-between gap-3 text-[10px] sm:text-xs text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500" />
-            <span>256-bit AES Encryption</span>
-          </div>
-          <div className="flex items-center gap-3 sm:gap-4">
-            <span className="hidden sm:inline">
-              Last updated: {new Date().toLocaleTimeString()}
-            </span>
-            <div className="flex items-center gap-1">
-              <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Live</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-export default Dashboard;
+              

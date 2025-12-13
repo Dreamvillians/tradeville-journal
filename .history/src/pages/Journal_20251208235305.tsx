@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Plus,
+  Image as ImageIcon,
   Search,
+  Filter,
   TrendingUp,
-  TrendingDown,
   Clock,
   Wallet,
   Activity,
@@ -28,6 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -131,7 +133,7 @@ const FloatingOrbs = memo(() => (
 FloatingOrbs.displayName = "FloatingOrbs";
 
 // -------------------------------------------------------------------------------------
-// Types - Updated to match TradeForm expectations
+// Types
 // -------------------------------------------------------------------------------------
 
 interface TradeImage {
@@ -147,23 +149,14 @@ interface Trade {
   direction: "LONG" | "SHORT";
   entry_price: number;
   exit_price: number | null;
-  stop_loss: number | null;
-  take_profit: number | null;
-  position_size: number | null;
-  risk_amount: number | null;
-  reward_amount: number | null;
   profit_loss_currency: number | null;
-  profit_loss_r: number | null;
   opened_at: string;
   closed_at: string | null;
-  session: string | null;
-  market_condition: string | null;
+  position_size: number | null;
   setup_type: string | null;
-  confluence: string | null;
-  execution_rating: number | null;
-  follow_plan: boolean | null;
-  notes: string | null;
-  custom_fields: Record<string, string> | null;
+  notes?: string | null;
+  stop_loss?: number | null;
+  take_profit?: number | null;
   trade_images: TradeImage[];
 }
 
@@ -230,7 +223,7 @@ const MobileTradeCard = memo(
       <div className="journal-glass rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div 
-            className="flex items-center gap-2 flex-1 cursor-pointer"
+            className="flex items-center gap-2 flex-1"
             onClick={() => onViewDetails(trade)}
           >
             <div
@@ -242,7 +235,7 @@ const MobileTradeCard = memo(
             <div>
               <div className="font-bold text-white">{trade.instrument}</div>
               <div className="text-xs text-gray-500">
-                {format(new Date(trade.opened_at), "MMM dd, HH:mm")}
+                {format(new Date(trade.opened_at), "MMM dd")}
               </div>
             </div>
           </div>
@@ -258,8 +251,8 @@ const MobileTradeCard = memo(
                   : "text-gray-400"
               )}
             >
-              {trade.profit_loss_currency !== null
-                ? `${isWin ? "+" : ""}$${trade.profit_loss_currency.toFixed(2)}`
+              {trade.profit_loss_currency
+                ? `$${trade.profit_loss_currency.toFixed(2)}`
                 : "OPEN"}
             </div>
             
@@ -302,21 +295,6 @@ const MobileTradeCard = memo(
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-        </div>
-        
-        {/* Additional Info Row */}
-        <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
-          <span className={cn(
-            "font-semibold",
-            trade.direction === "LONG" ? "text-emerald-400" : "text-rose-400"
-          )}>
-            {trade.direction}
-          </span>
-          <span>Entry: {trade.entry_price}</span>
-          {trade.exit_price && <span>Exit: {trade.exit_price}</span>}
-          {trade.setup_type && (
-            <span className="truncate max-w-[80px]">{trade.setup_type}</span>
-          )}
         </div>
       </div>
     );
@@ -383,45 +361,23 @@ const Journal = () => {
           direction, 
           entry_price, 
           exit_price, 
-          stop_loss,
-          take_profit,
-          position_size,
-          risk_amount,
-          reward_amount,
           profit_loss_currency, 
-          profit_loss_r,
           opened_at, 
           closed_at,
-          session,
-          market_condition,
+          position_size,
           setup_type,
-          confluence,
-          execution_rating,
-          follow_plan,
           notes,
-          custom_fields,
+          stop_loss,
+          take_profit,
           trade_images(id, url, type, description)
         `)
         .eq("user_id", user.id)
         .order("opened_at", { ascending: false });
 
       if (error) throw error;
-      
-      // Transform the data to ensure proper typing
-      const transformedTrades: Trade[] = (data || []).map((trade: any) => ({
-        ...trade,
-        trade_images: trade.trade_images || [],
-        custom_fields: trade.custom_fields || null,
-      }));
-      
-      setTrades(transformedTrades);
+      setTrades(data || []);
     } catch (error) {
       console.error("Error fetching trades:", error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch trades. Please refresh the page.",
-        variant: "destructive",
-      });
     } finally {
       setLoading(false);
     }
@@ -457,19 +413,6 @@ const Journal = () => {
     
     setIsDeleting(true);
     try {
-      // First delete associated images from storage and database
-      if (tradeToDelete.trade_images && tradeToDelete.trade_images.length > 0) {
-        const { error: imagesError } = await supabase
-          .from("trade_images")
-          .delete()
-          .eq("trade_id", tradeToDelete.id);
-
-        if (imagesError) {
-          console.error("Error deleting trade images:", imagesError);
-        }
-      }
-
-      // Then delete the trade
       const { error } = await supabase
         .from("trades")
         .delete()
@@ -502,13 +445,8 @@ const Journal = () => {
     setIsEditModalOpen(false);
   };
 
-  const handleCancelNewTrade = () => {
-    setShowForm(false);
-  };
-
   // Format helpers
-  const formatPrice = (price: number | null) => {
-    if (price === null || price === undefined) return "-";
+  const formatPrice = (price: number) => {
     if (price < 1) return price.toFixed(5);
     if (price < 100) return price.toFixed(4);
     return price.toFixed(2);
@@ -592,7 +530,6 @@ const Journal = () => {
             </p>
           </div>
           <Button
-            type="button"
             onClick={() => setShowForm(true)}
             className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20 transition-all w-full sm:w-auto"
           >
@@ -604,7 +541,7 @@ const Journal = () => {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 mb-6 sm:mb-8 flex-shrink-0">
           <StatBadge
             label="Net P&L"
-            value={`${stats.netPnL >= 0 ? "+" : ""}$${stats.netPnL.toFixed(2)}`}
+            value={`$${stats.netPnL.toFixed(2)}`}
             icon={Wallet}
             color={stats.netPnL >= 0 ? "emerald" : "rose"}
           />
@@ -644,7 +581,6 @@ const Journal = () => {
             {(["ALL", "OPEN", "CLOSED"] as FilterStatus[]).map((status) => (
               <button
                 key={status}
-                type="button"
                 onClick={() => setStatusFilter(status)}
                 className={cn(
                   "px-3 sm:px-4 py-1.5 rounded-lg text-xs font-medium transition-all",
@@ -665,14 +601,12 @@ const Journal = () => {
             <Card className="journal-glass border-white/10">
               <CardHeader className="border-b border-white/5 pb-4 px-4 sm:px-6 flex flex-row items-center justify-between">
                 <CardTitle className="text-base sm:text-lg font-medium">
-                  New Trade Entry
+                  New Entry
                 </CardTitle>
                 <Button
-                  type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={handleCancelNewTrade}
-                  className="text-gray-400 hover:text-white hover:bg-white/10"
+                  onClick={() => setShowForm(false)}
                 >
                   <X className="h-4 w-4" />
                 </Button>
@@ -680,7 +614,7 @@ const Journal = () => {
               <CardContent className="pt-4 sm:pt-6 px-4 sm:px-6">
                 <TradeForm
                   onSuccess={handleFormSuccess}
-                  onCancel={handleCancelNewTrade}
+                  onCancel={() => setShowForm(false)}
                 />
               </CardContent>
             </Card>
@@ -696,25 +630,7 @@ const Journal = () => {
               </div>
             ) : filteredTrades.length === 0 ? (
               <div className="text-center py-20 text-gray-500 flex-1">
-                <div className="space-y-3">
-                  <Activity className="w-12 h-12 mx-auto text-gray-600" />
-                  <p className="text-lg font-medium">No trades found</p>
-                  <p className="text-sm">
-                    {searchQuery || statusFilter !== "ALL" 
-                      ? "Try adjusting your filters"
-                      : "Start by logging your first trade"}
-                  </p>
-                  {!showForm && !searchQuery && statusFilter === "ALL" && (
-                    <Button
-                      type="button"
-                      onClick={() => setShowForm(true)}
-                      className="mt-4 bg-emerald-600 hover:bg-emerald-700"
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Log Your First Trade
-                    </Button>
-                  )}
-                </div>
+                No trades found
               </div>
             ) : (
               <>
@@ -777,7 +693,7 @@ const Journal = () => {
                           <TableHead className="h-10 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-center">
                             Screenshots
                           </TableHead>
-                          <TableHead className="h-10 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-center w-[120px]">
+                          <TableHead className="h-10 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-center w-[100px]">
                             Actions
                           </TableHead>
                         </TableRow>
@@ -856,7 +772,9 @@ const Journal = () => {
                               </TableCell>
 
                               <TableCell className="text-right font-mono text-gray-300">
-                                {formatPrice(trade.exit_price)}
+                                {trade.exit_price
+                                  ? formatPrice(trade.exit_price)
+                                  : "-"}
                               </TableCell>
 
                               <TableCell className="text-right font-mono text-gray-400">
@@ -876,7 +794,7 @@ const Journal = () => {
                                     )}
                                   >
                                     {isWin ? "+" : ""}
-                                    ${trade.profit_loss_currency.toFixed(2)}
+                                    {trade.profit_loss_currency.toFixed(2)}
                                   </span>
                                 ) : (
                                   <span className="text-gray-600">-</span>
@@ -923,7 +841,6 @@ const Journal = () => {
                               <TableCell className="text-center">
                                 <div className="flex items-center justify-center gap-1">
                                   <Button
-                                    type="button"
                                     variant="ghost"
                                     size="icon"
                                     className="h-7 w-7 hover:bg-white/10 hover:text-emerald-400 text-gray-500 transition-colors"
@@ -933,7 +850,6 @@ const Journal = () => {
                                     <Eye className="w-3.5 h-3.5" />
                                   </Button>
                                   <Button
-                                    type="button"
                                     variant="ghost"
                                     size="icon"
                                     className="h-7 w-7 hover:bg-white/10 hover:text-blue-400 text-gray-500 transition-colors"
@@ -943,7 +859,6 @@ const Journal = () => {
                                     <Pencil className="w-3.5 h-3.5" />
                                   </Button>
                                   <Button
-                                    type="button"
                                     variant="ghost"
                                     size="icon"
                                     className="h-7 w-7 hover:bg-rose-500/10 hover:text-rose-400 text-gray-500 transition-colors"
@@ -997,14 +912,13 @@ const Journal = () => {
             {selectedImage && (
               <img
                 src={selectedImage}
-                alt="Trade Screenshot"
+                alt="Trade"
                 className="max-w-full max-h-full object-contain"
               />
             )}
             <button
-              type="button"
               onClick={() => setSelectedImage(null)}
-              className="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full hover:bg-white/20 transition-colors"
+              className="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full hover:bg-white/20"
             >
               <X className="w-5 h-5" />
             </button>
@@ -1017,7 +931,7 @@ const Journal = () => {
         open={!!selectedTrade}
         onOpenChange={(open) => !open && setSelectedTrade(null)}
       >
-        <DialogContent className="w-[95vw] max-w-md bg-[#0F1018] border border-white/10 text-white max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-md bg-[#0F1018] border border-white/10 text-white">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -1036,7 +950,6 @@ const Journal = () => {
                 </Badge>
               </div>
               <Button
-                type="button"
                 variant="ghost"
                 size="sm"
                 className="text-gray-400 hover:text-white hover:bg-white/10"
@@ -1068,15 +981,10 @@ const Journal = () => {
                       : "text-gray-400"
                   )}
                 >
-                  {selectedTrade.profit_loss_currency !== null
-                    ? `${(selectedTrade.profit_loss_currency || 0) > 0 ? "+" : ""}$${selectedTrade.profit_loss_currency.toFixed(2)}`
+                  {selectedTrade.profit_loss_currency
+                    ? `$${selectedTrade.profit_loss_currency.toFixed(2)}`
                     : "OPEN"}
                 </div>
-                {selectedTrade.profit_loss_r !== null && (
-                  <div className="text-sm text-gray-500 mt-1">
-                    {selectedTrade.profit_loss_r > 0 ? "+" : ""}{selectedTrade.profit_loss_r.toFixed(2)}R
-                  </div>
-                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4 text-sm">
@@ -1103,13 +1011,13 @@ const Journal = () => {
                 <div className="space-y-1">
                   <div className="text-gray-500 text-xs">Entry Price</div>
                   <div className="font-mono">
-                    {formatPrice(selectedTrade.entry_price)}
+                    {selectedTrade.entry_price}
                   </div>
                 </div>
                 <div className="space-y-1">
                   <div className="text-gray-500 text-xs">Exit Price</div>
                   <div className="font-mono">
-                    {formatPrice(selectedTrade.exit_price)}
+                    {selectedTrade.exit_price || "-"}
                   </div>
                 </div>
                 <div className="space-y-1">
@@ -1122,59 +1030,19 @@ const Journal = () => {
                   <div className="text-gray-500 text-xs">Setup</div>
                   <div>{selectedTrade.setup_type || "-"}</div>
                 </div>
-                {selectedTrade.stop_loss !== null && (
+                {selectedTrade.stop_loss && (
                   <div className="space-y-1">
                     <div className="text-gray-500 text-xs">Stop Loss</div>
                     <div className="font-mono text-rose-400">
-                      {formatPrice(selectedTrade.stop_loss)}
+                      {selectedTrade.stop_loss}
                     </div>
                   </div>
                 )}
-                {selectedTrade.take_profit !== null && (
+                {selectedTrade.take_profit && (
                   <div className="space-y-1">
                     <div className="text-gray-500 text-xs">Take Profit</div>
                     <div className="font-mono text-emerald-400">
-                      {formatPrice(selectedTrade.take_profit)}
-                    </div>
-                  </div>
-                )}
-                {selectedTrade.risk_amount !== null && (
-                  <div className="space-y-1">
-                    <div className="text-gray-500 text-xs">Risk Amount</div>
-                    <div className="font-mono">
-                      ${selectedTrade.risk_amount.toFixed(2)}
-                    </div>
-                  </div>
-                )}
-                {selectedTrade.session && (
-                  <div className="space-y-1">
-                    <div className="text-gray-500 text-xs">Session</div>
-                    <div>{selectedTrade.session}</div>
-                  </div>
-                )}
-                {selectedTrade.market_condition && (
-                  <div className="space-y-1">
-                    <div className="text-gray-500 text-xs">Market Condition</div>
-                    <div>{selectedTrade.market_condition}</div>
-                  </div>
-                )}
-                {selectedTrade.confluence && (
-                  <div className="space-y-1 col-span-2">
-                    <div className="text-gray-500 text-xs">Confluence</div>
-                    <div>{selectedTrade.confluence}</div>
-                  </div>
-                )}
-                {selectedTrade.execution_rating !== null && (
-                  <div className="space-y-1">
-                    <div className="text-gray-500 text-xs">Execution Rating</div>
-                    <div>{selectedTrade.execution_rating}/5</div>
-                  </div>
-                )}
-                {selectedTrade.follow_plan !== null && (
-                  <div className="space-y-1">
-                    <div className="text-gray-500 text-xs">Followed Plan</div>
-                    <div className={selectedTrade.follow_plan ? "text-emerald-400" : "text-rose-400"}>
-                      {selectedTrade.follow_plan ? "Yes" : "No"}
+                      {selectedTrade.take_profit}
                     </div>
                   </div>
                 )}
@@ -1185,25 +1053,8 @@ const Journal = () => {
                   <div className="text-gray-500 text-xs uppercase tracking-wider">
                     Notes
                   </div>
-                  <div className="p-3 bg-white/5 rounded-lg text-sm text-gray-300 whitespace-pre-wrap">
+                  <div className="p-3 bg-white/5 rounded-lg text-sm text-gray-300">
                     {selectedTrade.notes}
-                  </div>
-                </div>
-              )}
-
-              {/* Custom Fields */}
-              {selectedTrade.custom_fields && Object.keys(selectedTrade.custom_fields).length > 0 && (
-                <div className="space-y-2">
-                  <div className="text-gray-500 text-xs uppercase tracking-wider">
-                    Custom Fields
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {Object.entries(selectedTrade.custom_fields).map(([key, value]) => (
-                      <div key={key} className="space-y-1">
-                        <div className="text-gray-500 text-xs">{key}</div>
-                        <div className="text-sm">{value || "-"}</div>
-                      </div>
-                    ))}
                   </div>
                 </div>
               )}
@@ -1211,58 +1062,25 @@ const Journal = () => {
               {selectedTrade.trade_images && selectedTrade.trade_images.length > 0 && (
                 <div className="space-y-2">
                   <div className="text-gray-500 text-xs uppercase tracking-wider">
-                    Screenshots ({selectedTrade.trade_images.length})
+                    Screenshots
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     {selectedTrade.trade_images.map((img) => (
                       <div
                         key={img.id}
                         onClick={() => setSelectedImage(img.url)}
-                        className="aspect-video rounded-lg border border-white/10 bg-black overflow-hidden cursor-pointer hover:border-emerald-500 transition-all group relative"
+                        className="aspect-video rounded-lg border border-white/10 bg-black overflow-hidden cursor-pointer hover:border-emerald-500 transition-all"
                       >
                         <img
                           src={img.url}
-                          className="w-full h-full object-cover group-hover:opacity-80 transition-opacity"
+                          className="w-full h-full object-cover"
                           alt="Trade screenshot"
                         />
-                        <div className="absolute bottom-1 left-1">
-                          <span className="text-[8px] px-1 py-0.5 bg-black/70 rounded text-gray-300 uppercase">
-                            {img.type}
-                          </span>
-                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
-
-              {/* Action Buttons in Details Modal */}
-              <div className="flex items-center gap-2 pt-4 border-t border-white/5">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 bg-white/5 border-white/10 text-white hover:bg-white/10"
-                  onClick={() => {
-                    handleEditTrade(selectedTrade);
-                  }}
-                >
-                  <Pencil className="w-4 h-4 mr-2" />
-                  Edit Trade
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20"
-                  onClick={() => {
-                    setSelectedTrade(null);
-                    setTradeToDelete(selectedTrade);
-                  }}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
             </div>
           )}
         </DialogContent>
@@ -1294,14 +1112,13 @@ const Journal = () => {
               )}
             </DialogTitle>
             <DialogDescription className="text-gray-500">
-              Update your trade details below. All fields will be pre-filled with your existing data.
+              Update your trade details below.
             </DialogDescription>
           </DialogHeader>
 
           {editingTrade && (
             <div className="py-4">
               <TradeForm
-                key={editingTrade.id}
                 initialData={editingTrade}
                 onSuccess={handleFormSuccess}
                 onCancel={handleCancelEdit}
@@ -1326,23 +1143,11 @@ const Journal = () => {
             <AlertDialogDescription className="text-gray-400">
               Are you sure you want to delete this trade? This action cannot be undone.
               {tradeToDelete && (
-                <div className="mt-3 p-3 bg-white/5 rounded-lg border border-white/10">
+                <div className="mt-3 p-3 bg-white/5 rounded-lg">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-white">
-                        {tradeToDelete.instrument}
-                      </span>
-                      <Badge
-                        className={cn(
-                          "text-[10px]",
-                          tradeToDelete.direction === "LONG"
-                            ? "bg-emerald-500/10 text-emerald-400"
-                            : "bg-rose-500/10 text-rose-400"
-                        )}
-                      >
-                        {tradeToDelete.direction}
-                      </Badge>
-                    </div>
+                    <span className="font-bold text-white">
+                      {tradeToDelete.instrument}
+                    </span>
                     <span
                       className={cn(
                         "font-mono font-bold",
@@ -1353,28 +1158,20 @@ const Journal = () => {
                           : "text-gray-400"
                       )}
                     >
-                      {tradeToDelete.profit_loss_currency !== null
-                        ? `${(tradeToDelete.profit_loss_currency || 0) > 0 ? "+" : ""}$${tradeToDelete.profit_loss_currency.toFixed(2)}`
+                      {tradeToDelete.profit_loss_currency
+                        ? `$${tradeToDelete.profit_loss_currency.toFixed(2)}`
                         : "OPEN"}
                     </span>
                   </div>
                   <div className="text-xs text-gray-500 mt-1">
-                    Opened: {format(new Date(tradeToDelete.opened_at), "MMM dd, yyyy HH:mm")}
+                    {format(new Date(tradeToDelete.opened_at), "MMM dd, yyyy HH:mm")}
                   </div>
-                  {tradeToDelete.trade_images && tradeToDelete.trade_images.length > 0 && (
-                    <div className="text-xs text-gray-500 mt-1">
-                      {tradeToDelete.trade_images.length} screenshot(s) will also be deleted
-                    </div>
-                  )}
                 </div>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel 
-              className="bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white"
-              disabled={isDeleting}
-            >
+            <AlertDialogCancel className="bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white">
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction

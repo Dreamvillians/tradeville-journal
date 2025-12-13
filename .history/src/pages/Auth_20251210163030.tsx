@@ -1,4 +1,3 @@
-// pages/Auth.tsx
 import { useState, useEffect, useMemo, useCallback, memo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -107,89 +106,57 @@ const useLiveMarketData = () => {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const previousPrices = useRef<Map<string, number>>(new Map());
-  const priceHistory = useRef<number[]>([]);
-  const isUnmounted = useRef(false);
 
   const fetchMarketData = useCallback(async () => {
-    if (isUnmounted.current) return;
-
     try {
-      setLoading(true);
-
-      // Create fetch promises
-      const promises: Promise<Response>[] = [];
-
-      // 1. Crypto prices from CoinGecko (free, no API key needed for simple price)
-      promises.push(
-        fetch(
-          'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd&include_24hr_change=true',
-          { signal: AbortSignal.timeout(10000) }
-        )
+      // Fetch crypto prices from CoinGecko (free, no API key needed)
+      const cryptoPromise = fetch(
+        'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true'
       );
 
-      // 2. Forex rates from ExchangeRate API (free)
-      promises.push(
-        fetch(
-          'https://api.exchangerate-api.com/v4/latest/EUR',
-          { signal: AbortSignal.timeout(10000) }
-        )
+      // Fetch additional crypto data for candles (BTC klines-like data)
+      const candlePromise = fetch(
+        'https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=1&interval=hourly'
       );
 
-      // 3. Candle data from Binance (free, no API key needed)
-      promises.push(
-        fetch(
-          'https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=8',
-          { signal: AbortSignal.timeout(10000) }
-        )
+      // Fetch forex rates from ExchangeRate API (free)
+      const forexPromise = fetch(
+        'https://api.exchangerate-api.com/v4/latest/EUR'
       );
 
-      const [cryptoResponse, forexResponse, candleResponse] = await Promise.allSettled(promises);
+      const [cryptoResponse, candleResponse, forexResponse] = await Promise.all([
+        cryptoPromise,
+        candlePromise,
+        forexPromise
+      ]);
 
-      if (isUnmounted.current) return;
-
-      // Parse crypto data
-      let btcPrice = 67234;
-      let ethPrice = 3456;
-      let solPrice = 147.82;
-      let btcChange = 2.3;
-      let ethChange = 1.5;
-      let solChange = 3.2;
-
-      if (cryptoResponse.status === 'fulfilled' && cryptoResponse.value.ok) {
-        try {
-          const cryptoData = await cryptoResponse.value.json();
-          btcPrice = cryptoData.bitcoin?.usd || btcPrice;
-          ethPrice = cryptoData.ethereum?.usd || ethPrice;
-          solPrice = cryptoData.solana?.usd || solPrice;
-          btcChange = cryptoData.bitcoin?.usd_24h_change || btcChange;
-          ethChange = cryptoData.ethereum?.usd_24h_change || ethChange;
-          solChange = cryptoData.solana?.usd_24h_change || solChange;
-        } catch (e) {
-          console.warn('Failed to parse crypto data');
-        }
+      if (!cryptoResponse.ok || !forexResponse.ok) {
+        throw new Error('Failed to fetch market data');
       }
 
-      // Parse forex data
-      let eurUsd = 1.087;
-      if (forexResponse.status === 'fulfilled' && forexResponse.value.ok) {
-        try {
-          const forexData = await forexResponse.value.json();
-          eurUsd = forexData.rates?.USD || eurUsd;
-        } catch (e) {
-          console.warn('Failed to parse forex data');
-        }
+      const cryptoData = await cryptoResponse.json();
+      const forexData = await forexResponse.json();
+      
+      let candleData = null;
+      if (candleResponse.ok) {
+        candleData = await candleResponse.json();
       }
+
+      // Calculate price changes
+      const btcPrice = cryptoData.bitcoin?.usd || 67234;
+      const ethPrice = cryptoData.ethereum?.usd || 3456;
+      const eurUsd = forexData.rates?.USD || 1.087;
+      
+      const btcChange = cryptoData.bitcoin?.usd_24h_change || 0;
+      const ethChange = cryptoData.ethereum?.usd_24h_change || 0;
 
       // Calculate EUR/USD change based on previous value
       const prevEurUsd = previousPrices.current.get('EUR/USD') || eurUsd;
-      const eurChange = previousPrices.current.has('EUR/USD') 
-        ? ((eurUsd - prevEurUsd) / prevEurUsd * 100)
-        : 0.05;
+      const eurChange = ((eurUsd - prevEurUsd) / prevEurUsd * 100);
 
       // Update previous prices
       previousPrices.current.set('BTC/USD', btcPrice);
       previousPrices.current.set('ETH/USD', ethPrice);
-      previousPrices.current.set('SOL/USD', solPrice);
       previousPrices.current.set('EUR/USD', eurUsd);
 
       // Format tickers with real data
@@ -217,137 +184,63 @@ const useLiveMarketData = () => {
         },
         {
           symbol: "SOL/USD",
-          price: solPrice.toLocaleString('en-US', { maximumFractionDigits: 2 }),
-          change: `${solChange >= 0 ? '+' : ''}${solChange.toFixed(1)}%`,
-          isUp: solChange >= 0,
-          prevPrice: previousPrices.current.get('SOL/USD')
+          price: "147.82", // Would need additional API call for SOL
+          change: "+3.2%",
+          isUp: true
         }
       ];
 
-      if (!isUnmounted.current) {
-        setTickers(newTickers);
-      }
+      setTickers(newTickers);
 
-      // Parse candle data from Binance
-      let candlesGenerated = false;
-      if (candleResponse.status === 'fulfilled' && candleResponse.value.ok) {
-        try {
-          const klines = await candleResponse.value.json();
+      // Generate candles from price history
+      if (candleData?.prices && candleData.prices.length >= 8) {
+        const prices = candleData.prices.slice(-8);
+        const newCandles: CandleData[] = prices.map((pricePoint: [number, number], index: number) => {
+          const currentPrice = pricePoint[1];
+          const prevPrice = index > 0 ? prices[index - 1][1] : currentPrice;
+          const priceChange = currentPrice - prevPrice;
+          const volatility = Math.abs(priceChange) / prevPrice * 100;
           
-          if (Array.isArray(klines) && klines.length >= 8) {
-            const newCandles: CandleData[] = klines.map((kline: any[], index: number) => {
-              // Binance kline format: [openTime, open, high, low, close, volume, closeTime, ...]
-              const open = parseFloat(kline[1]);
-              const high = parseFloat(kline[2]);
-              const low = parseFloat(kline[3]);
-              const close = parseFloat(kline[4]);
-              const isGreen = close >= open;
-              
-              // Calculate body height as percentage of price movement
-              const priceRange = high - low;
-              const bodySize = Math.abs(close - open);
-              const baseHeight = 25;
-              const dynamicHeight = (bodySize / priceRange) * 50;
-              
-              // Calculate wick sizes
-              const wickTopSize = isGreen 
-                ? (high - close) / priceRange * 15
-                : (high - open) / priceRange * 15;
-              const wickBottomSize = isGreen
-                ? (open - low) / priceRange * 15
-                : (close - low) / priceRange * 15;
-              
-              return {
-                id: index,
-                height: Math.max(20, Math.min(70, baseHeight + dynamicHeight)),
-                isGreen,
-                delay: index * 0.15,
-                wickTop: Math.max(3, Math.min(15, wickTopSize + 3)),
-                wickBottom: Math.max(3, Math.min(15, wickBottomSize + 3)),
-                open,
-                close,
-                high,
-                low
-              };
-            });
-            
-            if (!isUnmounted.current) {
-              setCandles(newCandles);
-              candlesGenerated = true;
-            }
-          }
-        } catch (e) {
-          console.warn('Failed to parse candle data');
-        }
-      }
-
-      // Fallback: Generate candles based on price movement if Binance failed
-      if (!candlesGenerated) {
-        priceHistory.current.push(btcPrice);
-        
-        // Keep last 20 prices for smoother candles
-        if (priceHistory.current.length > 20) {
-          priceHistory.current = priceHistory.current.slice(-20);
-        }
-
-        const history = priceHistory.current;
-        const volatility = history.length > 1 
-          ? (Math.max(...history) - Math.min(...history)) / btcPrice * 100 
-          : 1;
-
-        const generatedCandles: CandleData[] = Array.from({ length: 8 }, (_, index) => {
-          // Create semi-random but realistic looking candles
-          const seed = (btcPrice * (index + 1) + Date.now() / 100000) % 100;
-          const isGreen = btcChange >= 0 ? (seed > 35) : (seed > 65);
-          
-          // Base height varies with volatility
-          const baseHeight = 25 + (volatility * 3);
-          const randomHeight = (seed % 25) + 10;
+          // Calculate candle dimensions based on real price movement
+          const baseHeight = 30;
+          const heightMultiplier = Math.min(volatility * 50, 40);
           
           return {
             id: index,
-            height: Math.min(Math.max(baseHeight + randomHeight, 20), 65),
-            isGreen,
+            height: baseHeight + heightMultiplier,
+            isGreen: priceChange >= 0,
             delay: index * 0.15,
-            wickTop: 3 + (seed % 10),
-            wickBottom: 3 + ((seed + 5) % 10),
+            wickTop: 5 + Math.random() * 10,
+            wickBottom: 5 + Math.random() * 10,
+            open: prevPrice,
+            close: currentPrice,
+            high: Math.max(prevPrice, currentPrice) * 1.001,
+            low: Math.min(prevPrice, currentPrice) * 0.999
           };
         });
-
-        if (!isUnmounted.current) {
-          setCandles(generatedCandles);
-        }
+        
+        setCandles(newCandles);
       }
 
-      if (!isUnmounted.current) {
-        setLastUpdate(new Date());
-        setLoading(false);
-        setError(null);
-      }
+      setLastUpdate(new Date());
+      setLoading(false);
+      setError(null);
     } catch (err) {
       console.error('Market data fetch error:', err);
-      if (!isUnmounted.current) {
-        setError('Failed to fetch live data');
-        setLoading(false);
-      }
-      // Keep showing default/previous data on error
+      setError('Failed to fetch live data');
+      setLoading(false);
+      // Keep showing default data on error
     }
   }, []);
 
   useEffect(() => {
-    isUnmounted.current = false;
-    
-    // Initial fetch with small delay to prevent blocking render
-    const initialTimeout = setTimeout(fetchMarketData, 500);
+    // Initial fetch
+    fetchMarketData();
     
     // Refresh every 30 seconds
     const interval = setInterval(fetchMarketData, 30000);
     
-    return () => {
-      isUnmounted.current = true;
-      clearTimeout(initialTimeout);
-      clearInterval(interval);
-    };
+    return () => clearInterval(interval);
   }, [fetchMarketData]);
 
   return { tickers, candles, loading, error, lastUpdate, refresh: fetchMarketData };
@@ -849,7 +742,7 @@ export default function Auth() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Live market data hook
+  // Live market data hook (only candles + loading + refresh used now)
   const { 
     candles, 
     loading: marketLoading, 
@@ -861,9 +754,6 @@ export default function Auth() {
   // Inject styles once
   useEffect(() => {
     if (!stylesInjected.current) {
-      const existingStyle = document.getElementById("auth-animations");
-      if (existingStyle) existingStyle.remove();
-      
       const styleSheet = document.createElement("style");
       styleSheet.id = "auth-animations";
       styleSheet.textContent = AUTH_STYLES;
@@ -1025,7 +915,7 @@ export default function Auth() {
       <FloatingOrbs />
       <AnimatedGrid />
       
-      {/* Live Candlesticks - Now with real-time data from Binance */}
+      {/* Live Candlesticks - Now with real-time data */}
       <AnimatedCandlesticks 
         candles={candles} 
         loading={marketLoading} 

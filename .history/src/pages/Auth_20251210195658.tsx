@@ -1,4 +1,3 @@
-// pages/Auth.tsx
 import { useState, useEffect, useMemo, useCallback, memo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,15 +23,35 @@ import {
   Loader2,
   LineChart,
   Activity,
-  RefreshCw
+  RefreshCw,
+  AlertCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// --- Constants ---
+// =====================================================================================
+// CONSTANTS & CONFIGURATION
+// =====================================================================================
+
 const LAST_AUTH_METHOD_KEY = "tradeville-last-auth-method";
 const REMEMBER_EMAIL_KEY = "tradeville-remember-email";
 
-// Pre-computed data
+// API Configuration
+const API_CONFIG = {
+  COINGECKO_API_KEY: import.meta.env.VITE_COINGECKO_API_KEY || "",
+  REFRESH_INTERVAL: 30000, // 30 seconds
+  MAX_RETRIES: 3,
+  RETRY_DELAY_BASE: 1000,
+};
+
+// Log API status on load
+if (typeof window !== "undefined") {
+  console.log("📊 Auth Page Market Data Status:");
+  console.log(`  • CoinGecko: ${API_CONFIG.COINGECKO_API_KEY ? "✅ API Key configured" : "⚠️ Using free tier (limited)"}`);
+  console.log(`  • Binance: ✅ No key required`);
+  console.log(`  • ExchangeRate: ✅ No key required`);
+}
+
+// Pre-computed particles for background animation
 const PARTICLES = Array.from({ length: 20 }, (_, i) => ({
   id: i,
   width: 2 + (i % 4),
@@ -49,8 +68,8 @@ const PARTICLES = Array.from({ length: 20 }, (_, i) => ({
 const DEFAULT_TICKERS = [
   { symbol: "BTC/USD", price: "67,234", change: "+2.3%", isUp: true },
   { symbol: "ETH/USD", price: "3,456", change: "+1.5%", isUp: true },
-  { symbol: "EUR/USD", price: "1.087", change: "-0.1%", isUp: false },
-  { symbol: "AAPL", price: "178.32", change: "+0.8%", isUp: true },
+  { symbol: "EUR/USD", price: "1.0870", change: "-0.1%", isUp: false },
+  { symbol: "SOL/USD", price: "147.82", change: "+3.2%", isUp: true },
 ];
 
 const DEFAULT_CANDLES = Array.from({ length: 8 }, (_, i) => ({
@@ -77,7 +96,10 @@ const SOCIAL_BUTTONS = [
   { provider: 'linkedin_oidc', label: 'LinkedIn', icon: 'linkedin' },
 ] as const;
 
-// --- Types ---
+// =====================================================================================
+// TYPES
+// =====================================================================================
+
 interface TickerData {
   symbol: string;
   price: string;
@@ -99,261 +121,19 @@ interface CandleData {
   low?: number;
 }
 
-// --- Custom Hook for Live Market Data ---
-const useLiveMarketData = () => {
-  const [tickers, setTickers] = useState<TickerData[]>(DEFAULT_TICKERS);
-  const [candles, setCandles] = useState<CandleData[]>(DEFAULT_CANDLES);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const previousPrices = useRef<Map<string, number>>(new Map());
-  const priceHistory = useRef<number[]>([]);
-  const isUnmounted = useRef(false);
+interface MarketDataState {
+  tickers: TickerData[];
+  candles: CandleData[];
+  loading: boolean;
+  error: string | null;
+  lastUpdate: Date | null;
+  source: 'binance' | 'coingecko' | 'fallback';
+}
 
-  const fetchMarketData = useCallback(async () => {
-    if (isUnmounted.current) return;
+// =====================================================================================
+// STYLES
+// =====================================================================================
 
-    try {
-      setLoading(true);
-
-      // Create fetch promises
-      const promises: Promise<Response>[] = [];
-
-      // 1. Crypto prices from CoinGecko (free, no API key needed for simple price)
-      promises.push(
-        fetch(
-          'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd&include_24hr_change=true',
-          { signal: AbortSignal.timeout(10000) }
-        )
-      );
-
-      // 2. Forex rates from ExchangeRate API (free)
-      promises.push(
-        fetch(
-          'https://api.exchangerate-api.com/v4/latest/EUR',
-          { signal: AbortSignal.timeout(10000) }
-        )
-      );
-
-      // 3. Candle data from Binance (free, no API key needed)
-      promises.push(
-        fetch(
-          'https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=8',
-          { signal: AbortSignal.timeout(10000) }
-        )
-      );
-
-      const [cryptoResponse, forexResponse, candleResponse] = await Promise.allSettled(promises);
-
-      if (isUnmounted.current) return;
-
-      // Parse crypto data
-      let btcPrice = 67234;
-      let ethPrice = 3456;
-      let solPrice = 147.82;
-      let btcChange = 2.3;
-      let ethChange = 1.5;
-      let solChange = 3.2;
-
-      if (cryptoResponse.status === 'fulfilled' && cryptoResponse.value.ok) {
-        try {
-          const cryptoData = await cryptoResponse.value.json();
-          btcPrice = cryptoData.bitcoin?.usd || btcPrice;
-          ethPrice = cryptoData.ethereum?.usd || ethPrice;
-          solPrice = cryptoData.solana?.usd || solPrice;
-          btcChange = cryptoData.bitcoin?.usd_24h_change || btcChange;
-          ethChange = cryptoData.ethereum?.usd_24h_change || ethChange;
-          solChange = cryptoData.solana?.usd_24h_change || solChange;
-        } catch (e) {
-          console.warn('Failed to parse crypto data');
-        }
-      }
-
-      // Parse forex data
-      let eurUsd = 1.087;
-      if (forexResponse.status === 'fulfilled' && forexResponse.value.ok) {
-        try {
-          const forexData = await forexResponse.value.json();
-          eurUsd = forexData.rates?.USD || eurUsd;
-        } catch (e) {
-          console.warn('Failed to parse forex data');
-        }
-      }
-
-      // Calculate EUR/USD change based on previous value
-      const prevEurUsd = previousPrices.current.get('EUR/USD') || eurUsd;
-      const eurChange = previousPrices.current.has('EUR/USD') 
-        ? ((eurUsd - prevEurUsd) / prevEurUsd * 100)
-        : 0.05;
-
-      // Update previous prices
-      previousPrices.current.set('BTC/USD', btcPrice);
-      previousPrices.current.set('ETH/USD', ethPrice);
-      previousPrices.current.set('SOL/USD', solPrice);
-      previousPrices.current.set('EUR/USD', eurUsd);
-
-      // Format tickers with real data
-      const newTickers: TickerData[] = [
-        {
-          symbol: "BTC/USD",
-          price: btcPrice.toLocaleString('en-US', { maximumFractionDigits: 0 }),
-          change: `${btcChange >= 0 ? '+' : ''}${btcChange.toFixed(1)}%`,
-          isUp: btcChange >= 0,
-          prevPrice: previousPrices.current.get('BTC/USD')
-        },
-        {
-          symbol: "ETH/USD",
-          price: ethPrice.toLocaleString('en-US', { maximumFractionDigits: 0 }),
-          change: `${ethChange >= 0 ? '+' : ''}${ethChange.toFixed(1)}%`,
-          isUp: ethChange >= 0,
-          prevPrice: previousPrices.current.get('ETH/USD')
-        },
-        {
-          symbol: "EUR/USD",
-          price: eurUsd.toFixed(4),
-          change: `${eurChange >= 0 ? '+' : ''}${eurChange.toFixed(2)}%`,
-          isUp: eurChange >= 0,
-          prevPrice: prevEurUsd
-        },
-        {
-          symbol: "SOL/USD",
-          price: solPrice.toLocaleString('en-US', { maximumFractionDigits: 2 }),
-          change: `${solChange >= 0 ? '+' : ''}${solChange.toFixed(1)}%`,
-          isUp: solChange >= 0,
-          prevPrice: previousPrices.current.get('SOL/USD')
-        }
-      ];
-
-      if (!isUnmounted.current) {
-        setTickers(newTickers);
-      }
-
-      // Parse candle data from Binance
-      let candlesGenerated = false;
-      if (candleResponse.status === 'fulfilled' && candleResponse.value.ok) {
-        try {
-          const klines = await candleResponse.value.json();
-          
-          if (Array.isArray(klines) && klines.length >= 8) {
-            const newCandles: CandleData[] = klines.map((kline: any[], index: number) => {
-              // Binance kline format: [openTime, open, high, low, close, volume, closeTime, ...]
-              const open = parseFloat(kline[1]);
-              const high = parseFloat(kline[2]);
-              const low = parseFloat(kline[3]);
-              const close = parseFloat(kline[4]);
-              const isGreen = close >= open;
-              
-              // Calculate body height as percentage of price movement
-              const priceRange = high - low;
-              const bodySize = Math.abs(close - open);
-              const baseHeight = 25;
-              const dynamicHeight = (bodySize / priceRange) * 50;
-              
-              // Calculate wick sizes
-              const wickTopSize = isGreen 
-                ? (high - close) / priceRange * 15
-                : (high - open) / priceRange * 15;
-              const wickBottomSize = isGreen
-                ? (open - low) / priceRange * 15
-                : (close - low) / priceRange * 15;
-              
-              return {
-                id: index,
-                height: Math.max(20, Math.min(70, baseHeight + dynamicHeight)),
-                isGreen,
-                delay: index * 0.15,
-                wickTop: Math.max(3, Math.min(15, wickTopSize + 3)),
-                wickBottom: Math.max(3, Math.min(15, wickBottomSize + 3)),
-                open,
-                close,
-                high,
-                low
-              };
-            });
-            
-            if (!isUnmounted.current) {
-              setCandles(newCandles);
-              candlesGenerated = true;
-            }
-          }
-        } catch (e) {
-          console.warn('Failed to parse candle data');
-        }
-      }
-
-      // Fallback: Generate candles based on price movement if Binance failed
-      if (!candlesGenerated) {
-        priceHistory.current.push(btcPrice);
-        
-        // Keep last 20 prices for smoother candles
-        if (priceHistory.current.length > 20) {
-          priceHistory.current = priceHistory.current.slice(-20);
-        }
-
-        const history = priceHistory.current;
-        const volatility = history.length > 1 
-          ? (Math.max(...history) - Math.min(...history)) / btcPrice * 100 
-          : 1;
-
-        const generatedCandles: CandleData[] = Array.from({ length: 8 }, (_, index) => {
-          // Create semi-random but realistic looking candles
-          const seed = (btcPrice * (index + 1) + Date.now() / 100000) % 100;
-          const isGreen = btcChange >= 0 ? (seed > 35) : (seed > 65);
-          
-          // Base height varies with volatility
-          const baseHeight = 25 + (volatility * 3);
-          const randomHeight = (seed % 25) + 10;
-          
-          return {
-            id: index,
-            height: Math.min(Math.max(baseHeight + randomHeight, 20), 65),
-            isGreen,
-            delay: index * 0.15,
-            wickTop: 3 + (seed % 10),
-            wickBottom: 3 + ((seed + 5) % 10),
-          };
-        });
-
-        if (!isUnmounted.current) {
-          setCandles(generatedCandles);
-        }
-      }
-
-      if (!isUnmounted.current) {
-        setLastUpdate(new Date());
-        setLoading(false);
-        setError(null);
-      }
-    } catch (err) {
-      console.error('Market data fetch error:', err);
-      if (!isUnmounted.current) {
-        setError('Failed to fetch live data');
-        setLoading(false);
-      }
-      // Keep showing default/previous data on error
-    }
-  }, []);
-
-  useEffect(() => {
-    isUnmounted.current = false;
-    
-    // Initial fetch with small delay to prevent blocking render
-    const initialTimeout = setTimeout(fetchMarketData, 500);
-    
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchMarketData, 30000);
-    
-    return () => {
-      isUnmounted.current = true;
-      clearTimeout(initialTimeout);
-      clearInterval(interval);
-    };
-  }, [fetchMarketData]);
-
-  return { tickers, candles, loading, error, lastUpdate, refresh: fetchMarketData };
-};
-
-// Responsive CSS with mobile-first approach
 const AUTH_STYLES = `
   /* Base animations */
   .auth-float-slow { animation: auth-float 20s ease-in-out infinite; will-change: transform; }
@@ -424,7 +204,10 @@ const AUTH_STYLES = `
   .auth-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
 `;
 
-// Password strength calculator
+// =====================================================================================
+// UTILITY FUNCTIONS
+// =====================================================================================
+
 const calculatePasswordStrength = (password: string): { score: number; label: string; color: string } => {
   let score = 0;
   if (password.length >= 8) score += 25;
@@ -439,7 +222,346 @@ const calculatePasswordStrength = (password: string): { score: number; label: st
   return { score: Math.min(score, 100), label: "Strong", color: "bg-emerald-500" };
 };
 
-// --- Memoized Background Components ---
+// =====================================================================================
+// LIVE MARKET DATA HOOK (Using Binance - No API Key Required)
+// =====================================================================================
+
+const useLiveMarketData = () => {
+  const [state, setState] = useState<MarketDataState>({
+    tickers: DEFAULT_TICKERS,
+    candles: DEFAULT_CANDLES,
+    loading: true,
+    error: null,
+    lastUpdate: null,
+    source: 'fallback',
+  });
+  
+  const previousPrices = useRef<Map<string, number>>(new Map());
+  const retryCount = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Generate realistic candles from kline data
+  const processKlineData = useCallback((klineData: any[]): CandleData[] => {
+    if (!Array.isArray(klineData) || klineData.length === 0) {
+      return DEFAULT_CANDLES;
+    }
+
+    return klineData.slice(-8).map((kline: any[], index: number) => {
+      // Binance kline format: [openTime, open, high, low, close, volume, ...]
+      const [, open, high, low, close] = kline;
+      const openPrice = parseFloat(open);
+      const closePrice = parseFloat(close);
+      const highPrice = parseFloat(high);
+      const lowPrice = parseFloat(low);
+
+      const isGreen = closePrice >= openPrice;
+      const bodySize = Math.abs(closePrice - openPrice);
+      const range = highPrice - lowPrice || 1;
+
+      // Calculate heights proportionally
+      const bodyHeight = Math.max(15, Math.min(60, (bodySize / range) * 80 + 20));
+      const wickTopHeight = Math.max(3, ((highPrice - Math.max(openPrice, closePrice)) / range) * 25);
+      const wickBottomHeight = Math.max(3, ((Math.min(openPrice, closePrice) - lowPrice) / range) * 25);
+
+      return {
+        id: index,
+        height: bodyHeight,
+        isGreen,
+        delay: index * 0.12,
+        wickTop: wickTopHeight,
+        wickBottom: wickBottomHeight,
+        open: openPrice,
+        close: closePrice,
+        high: highPrice,
+        low: lowPrice,
+      };
+    });
+  }, []);
+
+  // Generate candles from simple price data (fallback)
+  const generateCandlesFromPrice = useCallback((
+    currentPrice: number,
+    priceChange24h: number
+  ): CandleData[] => {
+    const changeRatio = priceChange24h / 100;
+    const basePrice = currentPrice / (1 + changeRatio);
+    const priceRange = Math.abs(currentPrice - basePrice);
+
+    return Array.from({ length: 8 }, (_, index) => {
+      const progress = index / 7;
+      const noise = (Math.random() - 0.5) * priceRange * 0.4;
+      const trendPrice = basePrice + (currentPrice - basePrice) * progress + noise;
+
+      const prevPrice = index > 0
+        ? basePrice + (currentPrice - basePrice) * ((index - 1) / 7) + (Math.random() - 0.5) * priceRange * 0.2
+        : basePrice;
+
+      const isGreen = trendPrice >= prevPrice;
+      const volatility = Math.abs(trendPrice - prevPrice) / prevPrice * 100;
+
+      return {
+        id: index,
+        height: 25 + Math.min(volatility * 80, 45),
+        isGreen,
+        delay: index * 0.12,
+        wickTop: 4 + Math.random() * 10,
+        wickBottom: 4 + Math.random() * 10,
+        open: prevPrice,
+        close: trendPrice,
+        high: Math.max(prevPrice, trendPrice) * (1 + Math.random() * 0.003),
+        low: Math.min(prevPrice, trendPrice) * (1 - Math.random() * 0.003),
+      };
+    });
+  }, []);
+
+  const fetchMarketData = useCallback(async () => {
+    // Cancel any pending requests
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
+
+    try {
+      setState(prev => ({ ...prev, loading: true }));
+
+      // Strategy: Try Binance first (most reliable, no API key), then CoinGecko as backup
+      let binanceSuccess = false;
+      let tickerData: TickerData[] = DEFAULT_TICKERS;
+      let candleData: CandleData[] = DEFAULT_CANDLES;
+      let dataSource: 'binance' | 'coingecko' | 'fallback' = 'fallback';
+
+      // ===== BINANCE API (Primary - No API Key Required) =====
+      try {
+        const [tickerResponse, klineResponse, forexResponse] = await Promise.all([
+          fetch(
+            'https://api.binance.com/api/v3/ticker/24hr?symbols=["BTCUSDT","ETHUSDT","SOLUSDT"]',
+            { signal }
+          ),
+          fetch(
+            'https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=8',
+            { signal }
+          ),
+          fetch(
+            'https://api.exchangerate-api.com/v4/latest/EUR',
+            { signal }
+          ),
+        ]);
+
+        if (tickerResponse.ok) {
+          const binanceData = await tickerResponse.json();
+          const forexData = forexResponse.ok ? await forexResponse.json() : null;
+          
+          const btcData = binanceData.find((t: any) => t.symbol === "BTCUSDT");
+          const ethData = binanceData.find((t: any) => t.symbol === "ETHUSDT");
+          const solData = binanceData.find((t: any) => t.symbol === "SOLUSDT");
+          const eurUsd = forexData?.rates?.USD || 1.087;
+
+          // Calculate EUR/USD change
+          const prevEurUsd = previousPrices.current.get("EUR/USD") || eurUsd;
+          const eurChange = prevEurUsd > 0 ? ((eurUsd - prevEurUsd) / prevEurUsd) * 100 : 0;
+
+          // Update previous prices
+          if (btcData) previousPrices.current.set("BTC/USD", parseFloat(btcData.lastPrice));
+          if (ethData) previousPrices.current.set("ETH/USD", parseFloat(ethData.lastPrice));
+          if (solData) previousPrices.current.set("SOL/USD", parseFloat(solData.lastPrice));
+          previousPrices.current.set("EUR/USD", eurUsd);
+
+          tickerData = [
+            {
+              symbol: "BTC/USD",
+              price: btcData 
+                ? parseFloat(btcData.lastPrice).toLocaleString("en-US", { maximumFractionDigits: 0 })
+                : "67,234",
+              change: btcData
+                ? `${parseFloat(btcData.priceChangePercent) >= 0 ? "+" : ""}${parseFloat(btcData.priceChangePercent).toFixed(1)}%`
+                : "+2.3%",
+              isUp: btcData ? parseFloat(btcData.priceChangePercent) >= 0 : true,
+              prevPrice: previousPrices.current.get("BTC/USD"),
+            },
+            {
+              symbol: "ETH/USD",
+              price: ethData
+                ? parseFloat(ethData.lastPrice).toLocaleString("en-US", { maximumFractionDigits: 0 })
+                : "3,456",
+              change: ethData
+                ? `${parseFloat(ethData.priceChangePercent) >= 0 ? "+" : ""}${parseFloat(ethData.priceChangePercent).toFixed(1)}%`
+                : "+1.5%",
+              isUp: ethData ? parseFloat(ethData.priceChangePercent) >= 0 : true,
+              prevPrice: previousPrices.current.get("ETH/USD"),
+            },
+            {
+              symbol: "EUR/USD",
+              price: eurUsd.toFixed(4),
+              change: `${eurChange >= 0 ? "+" : ""}${eurChange.toFixed(2)}%`,
+              isUp: eurChange >= 0,
+              prevPrice: prevEurUsd,
+            },
+            {
+              symbol: "SOL/USD",
+              price: solData
+                ? parseFloat(solData.lastPrice).toFixed(2)
+                : "147.82",
+              change: solData
+                ? `${parseFloat(solData.priceChangePercent) >= 0 ? "+" : ""}${parseFloat(solData.priceChangePercent).toFixed(1)}%`
+                : "+3.2%",
+              isUp: solData ? parseFloat(solData.priceChangePercent) >= 0 : true,
+              prevPrice: previousPrices.current.get("SOL/USD"),
+            },
+          ];
+
+          // Process kline data for candles
+          if (klineResponse.ok) {
+            const klineJson = await klineResponse.json();
+            candleData = processKlineData(klineJson);
+          }
+
+          binanceSuccess = true;
+          dataSource = 'binance';
+        }
+      } catch (binanceError) {
+        if ((binanceError as Error).name !== 'AbortError') {
+          console.warn("Binance API failed, trying CoinGecko...", binanceError);
+        }
+      }
+
+      // ===== COINGECKO API (Backup) =====
+      if (!binanceSuccess) {
+        try {
+          // Use simple/price endpoint (works without API key)
+          const cgUrl = API_CONFIG.COINGECKO_API_KEY
+            ? `https://pro-api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd&include_24hr_change=true&x_cg_pro_api_key=${API_CONFIG.COINGECKO_API_KEY}`
+            : 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd&include_24hr_change=true';
+
+          const [cgResponse, forexResponse] = await Promise.all([
+            fetch(cgUrl, { signal }),
+            fetch('https://api.exchangerate-api.com/v4/latest/EUR', { signal }),
+          ]);
+
+          if (cgResponse.ok) {
+            const cgData = await cgResponse.json();
+            const forexData = forexResponse.ok ? await forexResponse.json() : null;
+
+            const btcPrice = cgData?.bitcoin?.usd || 67234;
+            const ethPrice = cgData?.ethereum?.usd || 3456;
+            const solPrice = cgData?.solana?.usd || 147.82;
+            const eurUsd = forexData?.rates?.USD || 1.087;
+
+            const btcChange = cgData?.bitcoin?.usd_24h_change || 2.3;
+            const ethChange = cgData?.ethereum?.usd_24h_change || 1.5;
+            const solChange = cgData?.solana?.usd_24h_change || 3.2;
+
+            const prevEurUsd = previousPrices.current.get("EUR/USD") || eurUsd;
+            const eurChange = prevEurUsd > 0 ? ((eurUsd - prevEurUsd) / prevEurUsd) * 100 : 0;
+
+            previousPrices.current.set("BTC/USD", btcPrice);
+            previousPrices.current.set("ETH/USD", ethPrice);
+            previousPrices.current.set("SOL/USD", solPrice);
+            previousPrices.current.set("EUR/USD", eurUsd);
+
+            tickerData = [
+              {
+                symbol: "BTC/USD",
+                price: btcPrice.toLocaleString("en-US", { maximumFractionDigits: 0 }),
+                change: `${btcChange >= 0 ? "+" : ""}${btcChange.toFixed(1)}%`,
+                isUp: btcChange >= 0,
+              },
+              {
+                symbol: "ETH/USD",
+                price: ethPrice.toLocaleString("en-US", { maximumFractionDigits: 0 }),
+                change: `${ethChange >= 0 ? "+" : ""}${ethChange.toFixed(1)}%`,
+                isUp: ethChange >= 0,
+              },
+              {
+                symbol: "EUR/USD",
+                price: eurUsd.toFixed(4),
+                change: `${eurChange >= 0 ? "+" : ""}${eurChange.toFixed(2)}%`,
+                isUp: eurChange >= 0,
+              },
+              {
+                symbol: "SOL/USD",
+                price: solPrice.toFixed(2),
+                change: `${solChange >= 0 ? "+" : ""}${solChange.toFixed(1)}%`,
+                isUp: solChange >= 0,
+              },
+            ];
+
+            // Generate candles from price data (since market_chart requires API key)
+            candleData = generateCandlesFromPrice(btcPrice, btcChange);
+            dataSource = 'coingecko';
+          }
+        } catch (cgError) {
+          if ((cgError as Error).name !== 'AbortError') {
+            console.warn("CoinGecko API also failed", cgError);
+          }
+        }
+      }
+
+      // Update state with fetched or fallback data
+      setState({
+        tickers: tickerData,
+        candles: candleData,
+        loading: false,
+        error: dataSource === 'fallback' ? 'Using cached data' : null,
+        lastUpdate: new Date(),
+        source: dataSource,
+      });
+
+      retryCount.current = 0;
+
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') {
+        return; // Ignore aborted requests
+      }
+
+      console.error("Market data fetch error:", error);
+
+      // Retry with exponential backoff
+      if (retryCount.current < API_CONFIG.MAX_RETRIES) {
+        retryCount.current++;
+        const delay = API_CONFIG.RETRY_DELAY_BASE * Math.pow(2, retryCount.current);
+        console.log(`Retrying in ${delay}ms (attempt ${retryCount.current}/${API_CONFIG.MAX_RETRIES})`);
+        setTimeout(fetchMarketData, delay);
+      } else {
+        setState(prev => ({
+          ...prev,
+          loading: false,
+          error: 'Failed to fetch live data',
+          source: 'fallback',
+        }));
+      }
+    }
+  }, [processKlineData, generateCandlesFromPrice]);
+
+  useEffect(() => {
+    // Initial fetch
+    fetchMarketData();
+
+    // Set up refresh interval
+    const interval = setInterval(fetchMarketData, API_CONFIG.REFRESH_INTERVAL);
+
+    return () => {
+      clearInterval(interval);
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [fetchMarketData]);
+
+  return {
+    tickers: state.tickers,
+    candles: state.candles,
+    loading: state.loading,
+    error: state.error,
+    lastUpdate: state.lastUpdate,
+    source: state.source,
+    refresh: fetchMarketData,
+  };
+};
+
+// =====================================================================================
+// MEMOIZED BACKGROUND COMPONENTS
+// =====================================================================================
 
 const FloatingOrbs = memo(() => (
   <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ contain: 'strict' }}>
@@ -478,13 +600,18 @@ const AnimatedGrid = memo(() => (
 ));
 AnimatedGrid.displayName = 'AnimatedGrid';
 
-// --- Live Candlesticks Component ---
+// =====================================================================================
+// LIVE CANDLESTICKS COMPONENT
+// =====================================================================================
+
 const AnimatedCandlesticks = memo(({ 
   candles, 
-  loading 
+  loading,
+  source 
 }: { 
   candles: CandleData[]; 
   loading: boolean;
+  source: string;
 }) => {
   return (
     <div className="absolute bottom-0 left-0 right-0 h-24 sm:h-32 md:h-40 lg:h-48 hidden sm:flex items-end justify-center gap-2 md:gap-3 opacity-15 sm:opacity-20 overflow-hidden" style={{ contain: 'strict' }}>
@@ -492,6 +619,13 @@ const AnimatedCandlesticks = memo(({
       {loading && (
         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-pulse" />
       )}
+      
+      {/* Data source indicator */}
+      <div className="absolute top-2 right-4 text-[10px] text-gray-600 uppercase tracking-wider">
+        {source === 'binance' && '● Binance'}
+        {source === 'coingecko' && '● CoinGecko'}
+        {source === 'fallback' && '○ Cached'}
+      </div>
       
       {candles.map((candle) => (
         <div
@@ -538,7 +672,9 @@ const AnimatedCandlesticks = memo(({
 });
 AnimatedCandlesticks.displayName = 'AnimatedCandlesticks';
 
-// --- UI Components ---
+// =====================================================================================
+// UI COMPONENTS
+// =====================================================================================
 
 const AnimatedLogo = memo(({ size = "default" }: { size?: "default" | "large" | "small" }) => {
   const sizeClasses = {
@@ -832,7 +968,10 @@ const PasswordStrengthIndicator = memo(({ password, strength }: {
 });
 PasswordStrengthIndicator.displayName = 'PasswordStrengthIndicator';
 
-// --- Main Component ---
+// =====================================================================================
+// MAIN AUTH COMPONENT
+// =====================================================================================
+
 export default function Auth() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -853,6 +992,8 @@ export default function Auth() {
   const { 
     candles, 
     loading: marketLoading, 
+    error: marketError,
+    source: marketSource,
     refresh: refreshMarketData 
   } = useLiveMarketData();
 
@@ -1025,10 +1166,11 @@ export default function Auth() {
       <FloatingOrbs />
       <AnimatedGrid />
       
-      {/* Live Candlesticks - Now with real-time data from Binance */}
+      {/* Live Candlesticks */}
       <AnimatedCandlesticks 
         candles={candles} 
-        loading={marketLoading} 
+        loading={marketLoading}
+        source={marketSource}
       />
 
       {/* Left Panel - Features (Desktop/Tablet) */}
@@ -1248,7 +1390,7 @@ export default function Auth() {
                   </div>
                 </div>
                 
-                {/* Social Buttons - Responsive Grid */}
+                {/* Social Buttons */}
                 <div className="space-y-3">
                   <div className="grid grid-cols-5 gap-2 sm:grid-cols-3 sm:gap-3">
                     {SOCIAL_BUTTONS.slice(0, 3).map((btn) => (
@@ -1262,217 +1404,10 @@ export default function Auth() {
                         isLastUsed={lastUsedProvider === btn.provider}
                       />
                     ))}
-                    {/* Show remaining 2 on mobile in same row */}
                     <div className="sm:hidden">
                       <SocialButton
                         provider={SOCIAL_BUTTONS[3].provider}
                         iconKey={SOCIAL_BUTTONS[3].icon}
                         label={SOCIAL_BUTTONS[3].label}
                         onClick={() => handleSocialLogin(SOCIAL_BUTTONS[3].provider as any)}
-                        disabled={loading}
-                        isLastUsed={lastUsedProvider === SOCIAL_BUTTONS[3].provider}
-                      />
-                    </div>
-                    <div className="sm:hidden">
-                      <SocialButton
-                        provider={SOCIAL_BUTTONS[4].provider}
-                        iconKey={SOCIAL_BUTTONS[4].icon}
-                        label={SOCIAL_BUTTONS[4].label}
-                        onClick={() => handleSocialLogin(SOCIAL_BUTTONS[4].provider as any)}
-                        disabled={loading}
-                        isLastUsed={lastUsedProvider === SOCIAL_BUTTONS[4].provider}
-                      />
-                    </div>
-                  </div>
-                  {/* Desktop: show 2 buttons in second row */}
-                  <div className="hidden sm:grid grid-cols-2 gap-3">
-                    {SOCIAL_BUTTONS.slice(3).map((btn) => (
-                      <SocialButton
-                        key={btn.provider}
-                        provider={btn.provider}
-                        iconKey={btn.icon}
-                        label={btn.label}
-                        onClick={() => handleSocialLogin(btn.provider as any)}
-                        disabled={loading}
-                        isLastUsed={lastUsedProvider === btn.provider}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="signup" className="space-y-4 mt-5 sm:mt-6 auth-fade">
-                <form onSubmit={handleSignUp} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-name" className="text-gray-300 text-xs uppercase tracking-wider font-semibold">
-                      Full Name
-                    </Label>
-                    <AnimatedInput
-                      id="signup-name"
-                      type="text"
-                      placeholder="John Doe"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      icon={User}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-email" className="text-gray-300 text-xs uppercase tracking-wider font-semibold">
-                      Email
-                    </Label>
-                    <AnimatedInput
-                      id="signup-email"
-                      type="email"
-                      placeholder="trader@example.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      icon={Mail}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-password" className="text-gray-300 text-xs uppercase tracking-wider font-semibold">
-                      Password
-                    </Label>
-                    <AnimatedInput
-                      id="signup-password"
-                      type="password"
-                      placeholder="Create a strong password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      icon={Lock}
-                      showPasswordToggle
-                      showPassword={showPassword}
-                      onTogglePassword={togglePassword}
-                    />
-                    
-                    {password && (
-                      <PasswordStrengthIndicator password={password} strength={passwordStrength} />
-                    )}
-                  </div>
-
-                  <div className="flex items-start space-x-2">
-                    <Checkbox 
-                      id="terms" 
-                      checked={agreedToTerms}
-                      onCheckedChange={(checked) => setAgreedToTerms(checked as boolean)}
-                      className="border-white/20 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500 mt-0.5 w-4 h-4"
-                    />
-                    <label htmlFor="terms" className="text-sm text-gray-400 cursor-pointer leading-relaxed">
-                      I agree to the{" "}
-                      <a href="/terms" className="text-emerald-400 hover:text-emerald-300 transition-colors">Terms</a>
-                      {" "}and{" "}
-                      <a href="/privacy" className="text-emerald-400 hover:text-emerald-300 transition-colors">Privacy</a>
-                    </label>
-                  </div>
-
-                  <Button 
-                    type="submit" 
-                    className="w-full h-11 sm:h-12 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-semibold text-sm sm:text-base transition-all duration-300 group shadow-lg shadow-emerald-500/25 active:scale-[0.98] touch-manipulation relative overflow-hidden" 
-                    disabled={loading || !agreedToTerms}
-                  >
-                    <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-                    
-                    {loading ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <>
-                        <span className="relative">Create Account</span>
-                        <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform relative" />
-                      </>
-                    )}
-                  </Button>
-                </form>
-
-                <div className="relative py-3">
-                  <div className="absolute inset-0 flex items-center">
-                    <Separator className="bg-white/10" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-[#12131a] px-3 text-gray-500">Or sign up with</span>
-                  </div>
-                </div>
-
-                {/* Social Buttons - Same responsive layout */}
-                <div className="space-y-3">
-                  <div className="grid grid-cols-5 gap-2 sm:grid-cols-3 sm:gap-3">
-                    {SOCIAL_BUTTONS.slice(0, 3).map((btn) => (
-                      <SocialButton
-                        key={btn.provider}
-                        provider={btn.provider}
-                        iconKey={btn.icon}
-                        label={btn.label}
-                        onClick={() => handleSocialLogin(btn.provider as any)}
-                        disabled={loading}
-                        isLastUsed={false}
-                      />
-                    ))}
-                    <div className="sm:hidden">
-                      <SocialButton
-                        provider={SOCIAL_BUTTONS[3].provider}
-                        iconKey={SOCIAL_BUTTONS[3].icon}
-                        label={SOCIAL_BUTTONS[3].label}
-                        onClick={() => handleSocialLogin(SOCIAL_BUTTONS[3].provider as any)}
-                        disabled={loading}
-                        isLastUsed={false}
-                      />
-                    </div>
-                    <div className="sm:hidden">
-                      <SocialButton
-                        provider={SOCIAL_BUTTONS[4].provider}
-                        iconKey={SOCIAL_BUTTONS[4].icon}
-                        label={SOCIAL_BUTTONS[4].label}
-                        onClick={() => handleSocialLogin(SOCIAL_BUTTONS[4].provider as any)}
-                        disabled={loading}
-                        isLastUsed={false}
-                      />
-                    </div>
-                  </div>
-                  <div className="hidden sm:grid grid-cols-2 gap-3">
-                    {SOCIAL_BUTTONS.slice(3).map((btn) => (
-                      <SocialButton
-                        key={btn.provider}
-                        provider={btn.provider}
-                        iconKey={btn.icon}
-                        label={btn.label}
-                        onClick={() => handleSocialLogin(btn.provider as any)}
-                        disabled={loading}
-                        isLastUsed={false}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                {/* Free trial badge */}
-                <div className="flex justify-center pt-1">
-                  <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full bg-gradient-to-r from-emerald-500/10 to-blue-500/10 border border-emerald-500/20 text-emerald-400 text-xs sm:text-sm font-medium">
-                    <Zap className="w-3.5 h-3.5" />
-                    <span>14-day free trial • No card</span>
-                  </div>
-                </div>
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-          
-          {/* Footer Security Badge */}
-          <div className="bg-black/30 py-2.5 sm:py-3 border-t border-white/5 flex items-center justify-center gap-2 text-xs text-gray-500 relative z-10 rounded-b-xl">
-            <Shield className="w-3.5 h-3.5 text-emerald-500" />
-            <span>256-bit AES Encryption</span>
-            {/* Market data refresh button */}
-            <button
-              onClick={refreshMarketData}
-              className="ml-2 p-1 hover:bg-white/10 rounded transition-colors"
-              title="Refresh market data"
-            >
-              <RefreshCw className={cn(
-                "w-3 h-3 text-gray-500 hover:text-emerald-400 transition-colors",
-                marketLoading && "animate-spin"
-              )} />
-            </button>
-          </div>
-        </Card>
-      </div>
-    </div>
-  );
-}
+                        disabled={

@@ -15,7 +15,7 @@ import GoalsHabits from "./pages/GoalsHabits";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
-// ⬇️ GLOBAL market ticker
+// ⬇️ NEW: import the ticker
 import MarketTicker from "./components/MarketTicker";
 
 const queryClient = new QueryClient();
@@ -36,16 +36,16 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          {/* Global ticker (only one instance will render even if used elsewhere) */}
+          {/* ⬇️ Ticker is now global, shown on all routes */}
           <MarketTicker />
 
-          {/* Push page content below the fixed ticker (h-9 / h-10) */}
+          {/* ⬇️ Push all page content below the fixed ticker (h-9 / h-10) */}
           <div className="pt-9 sm:pt-10">
             <Routes>
-              {/* Public routes - No Layout (but WITH Market Ticker) */}
+              {/* Public routes - No Layout (but now WITH Market Ticker) */}
               <Route path="/auth" element={<Auth />} />
 
-              {/* Protected routes - With Layout */}
+              {/* Protected routes - With Layout (and global Market Ticker) */}
               <Route element={<ProtectedLayout />}>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/journal" element={<Journal />} />

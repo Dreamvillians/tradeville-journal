@@ -241,12 +241,18 @@ export function Layout({ children }: LayoutProps) {
     <SidebarProvider>
       <MarketTicker />
       
-      {/* Container is strictly clipped to screen height/width */}
+      {/* 
+        1. Used h-screen and overflow-hidden to prevent window scrolling 
+        2. Kept pt-10 to offset the fixed ticker
+      */}
       <div className="flex h-screen w-full bg-[#05060b] text-foreground pt-10 overflow-hidden">
         <AppSidebar />
-        
-        {/* min-w-0 prevents flex container from expanding beyond screen width if content is wide */}
-        <div className="flex-1 flex flex-col h-full min-w-0">
+        <div className="flex-1 flex flex-col h-full">
+          {/* 
+             Top App Bar - Removed 'sticky top-10'. 
+             Because the outer container is fixed height, this header stays at the top 
+             of the flex column naturally, preventing any scroll-gap issues.
+          */}
           <header
             className="flex h-16 shrink-0 items-center gap-4 border-b border-border
                        bg-gradient-to-r from-background/95 via-background/80 to-background/95
@@ -316,10 +322,8 @@ export function Layout({ children }: LayoutProps) {
             </div>
           </header>
 
-          {/* overflow-x-hidden ensures no horizontal scrollbar from internal content */}
-          <main className="flex-1 overflow-y-auto overflow-x-hidden">
-            {children}
-          </main>
+          {/* Main Content - Added overflow-y-auto to scroll internally */}
+          <main className="flex-1 overflow-y-auto">{children}</main>
         </div>
       </div>
     </SidebarProvider>

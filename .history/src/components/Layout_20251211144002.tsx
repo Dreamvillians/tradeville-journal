@@ -110,9 +110,12 @@ const useMarketData = () => {
 // Market Ticker Component
 const MarketTicker = memo(() => {
   const data = useMarketData();
+
+  // Use 4 copies to ensure -50% translation lands on an identical frame for seamless looping
   const displayData = [...data, ...data, ...data, ...data];
 
   return (
+    // Fixed height h-10 (40px) matches the pt-10 layout padding perfectly
     <div className="fixed top-0 left-0 right-0 z-50 h-10 overflow-hidden bg-black/60 backdrop-blur-xl border-b border-white/5">
       <div className="dash-ticker flex h-full items-center whitespace-nowrap">
         {displayData.map((item, i) => (
@@ -153,6 +156,7 @@ export function Layout({ children }: LayoutProps) {
   const [user, setUser] = useState<UserSnippet | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
 
+  // Inject ticker styles
   useEffect(() => {
     if (!stylesInjected.current) {
       const styleSheet = document.createElement("style");
@@ -239,18 +243,18 @@ export function Layout({ children }: LayoutProps) {
 
   return (
     <SidebarProvider>
+      {/* Market Ticker - Fixed at top */}
       <MarketTicker />
       
-      {/* Container is strictly clipped to screen height/width */}
-      <div className="flex h-screen w-full bg-[#05060b] text-foreground pt-10 overflow-hidden">
+      {/* pt-10 creates exactly 40px space, matching h-10 ticker */}
+      <div className="flex min-h-screen w-full bg-[#05060b] text-foreground pt-10">
         <AppSidebar />
-        
-        {/* min-w-0 prevents flex container from expanding beyond screen width if content is wide */}
-        <div className="flex-1 flex flex-col h-full min-w-0">
+        <div className="flex-1 flex flex-col">
+          {/* Top App Bar - Sticky top-10 sticks exactly below the 40px ticker */}
           <header
-            className="flex h-16 shrink-0 items-center gap-4 border-b border-border
+            className="sticky top-10 z-40 flex h-16 items-center gap-4 border-b border-border
                        bg-gradient-to-r from-background/95 via-background/80 to-background/95
-                       backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 md:px-6 z-40"
+                       backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 md:px-6"
           >
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <SidebarTrigger className="text-muted-foreground hover:text-foreground" />
@@ -266,11 +270,13 @@ export function Layout({ children }: LayoutProps) {
             </div>
 
             <div className="flex items-center gap-3">
+              {/* Date pill */}
               <div className="hidden sm:flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-xs text-muted-foreground">
                 <CalendarDays className="w-3.5 h-3.5" />
                 <span>{todayLabel}</span>
               </div>
 
+              {/* User snippet + sign out */}
               <div className="flex items-center gap-2 rounded-full border border-border/80 bg-background/70 px-2 py-1">
                 <Avatar className="h-8 w-8 border border-white/10">
                   {user?.avatarUrl && <AvatarImage src={user.avatarUrl} />}
@@ -316,10 +322,8 @@ export function Layout({ children }: LayoutProps) {
             </div>
           </header>
 
-          {/* overflow-x-hidden ensures no horizontal scrollbar from internal content */}
-          <main className="flex-1 overflow-y-auto overflow-x-hidden">
-            {children}
-          </main>
+          {/* Main Content */}
+          <main className="flex-1 overflow-auto">{children}</main>
         </div>
       </div>
     </SidebarProvider>

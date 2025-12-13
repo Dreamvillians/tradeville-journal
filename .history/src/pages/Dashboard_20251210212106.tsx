@@ -62,15 +62,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-
-// Shared MarketTicker component - Real-time WebSocket-based ticker
 import MarketTicker from "@/components/MarketTicker";
 
-// =====================================================================================
-// STYLES (Dashboard-specific animations)
-// =====================================================================================
-
-const DASHBOARD_STYLES = `
+// --- STYLES (Dashboard animations only) ---
+const GLOBAL_STYLES = `
   .dash-float { animation: dash-float 6s ease-in-out infinite; }
   .dash-float-delayed { animation: dash-float 6s ease-in-out infinite; animation-delay: 2s; }
   .dash-pulse { animation: dash-pulse 3s ease-in-out infinite; }
@@ -85,7 +80,6 @@ const DASHBOARD_STYLES = `
   @keyframes dash-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
   @keyframes dash-pulse { 0%, 100% { opacity: 0.5; transform: scale(1); } 50% { opacity: 0.8; transform: scale(1.05); } }
   @keyframes dash-glow { 0%, 100% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.3); } 50% { box-shadow: 0 0 40px rgba(16, 185, 129, 0.6); } }
-  @keyframes dash-shimmer { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
   @keyframes dash-slide-up { 0% { transform: translateY(20px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
   @keyframes dash-slide-right { 0% { transform: translateX(-20px); opacity: 0; } 100% { transform: translateX(0); opacity: 1; } }
   @keyframes dash-fade-in { 0% { opacity: 0; } 100% { opacity: 1; } }
@@ -113,7 +107,7 @@ const DASHBOARD_STYLES = `
   .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   
   @media (prefers-reduced-motion: reduce) {
-    .dash-float, .dash-float-delayed, .dash-pulse, .dash-glow, .dash-bounce, .dash-shimmer { 
+    .dash-float, .dash-pulse, .dash-glow, .dash-bounce { 
       animation: none !important; 
     }
   }
@@ -184,7 +178,7 @@ interface TraderLevel {
 }
 
 // =====================================================================================
-// UTILITY FUNCTIONS
+// UTILS
 // =====================================================================================
 
 const formatCurrency = (value: number): string => {
@@ -220,6 +214,7 @@ const formatDuration = (ms: number): string => {
   return `${seconds}s`;
 };
 
+// Helper to extract user's display name
 const getUserDisplayName = (
   profile: UserProfile | null,
   userMetadata: Record<string, any> | undefined
@@ -240,10 +235,7 @@ const getUserDisplayName = (
   return "Trader";
 };
 
-// =====================================================================================
-// TRADER LEVELS CONFIGURATION
-// =====================================================================================
-
+// Trader Levels Configuration
 const TRADER_LEVELS: TraderLevel[] = [
   {
     level: 1,
@@ -342,28 +334,24 @@ const getTraderLevel = (
   totalPnL: number
 ): { currentLevel: TraderLevel; nextLevel: TraderLevel | null; progress: number } => {
   let currentLevelIndex = 0;
-  
   for (let i = TRADER_LEVELS.length - 1; i >= 0; i--) {
     const level = TRADER_LEVELS[i];
     const meetsTradeReq = totalTrades >= level.minTrades;
     const meetsWinRateReq = winRate >= level.minWinRate;
     const meetsPFReq = profitFactor >= level.minProfitFactor;
     const meetsProfitReq = !level.requiresProfit || totalPnL > 0;
-    
     if (meetsTradeReq && meetsWinRateReq && meetsPFReq && meetsProfitReq) {
       currentLevelIndex = i;
       break;
     }
   }
-  
   const currentLevel = TRADER_LEVELS[currentLevelIndex];
   const nextLevel =
     currentLevelIndex < TRADER_LEVELS.length - 1
       ? TRADER_LEVELS[currentLevelIndex + 1]
       : null;
-      
+
   let progress = 100;
-  
   if (nextLevel) {
     const tradeProgress =
       nextLevel.minTrades > 0
@@ -378,15 +366,14 @@ const getTraderLevel = (
         ? Math.min(100, (profitFactor / nextLevel.minProfitFactor) * 100)
         : 100;
     const profitProgress = !nextLevel.requiresProfit || totalPnL > 0 ? 100 : 0;
-    
-    progress = (tradeProgress + winRateProgress + pfProgress + profitProgress) / 4;
+    progress =
+      (tradeProgress + winRateProgress + pfProgress + profitProgress) / 4;
   }
-  
   return { currentLevel, nextLevel, progress };
 };
 
 // =====================================================================================
-// CUSTOM HOOKS
+// HOOKS
 // =====================================================================================
 
 const useAnimatedCounter = (
@@ -396,31 +383,29 @@ const useAnimatedCounter = (
 ) => {
   const [count, setCount] = useState(0);
   const countRef = useRef(0);
-  
+
   useEffect(() => {
     const start = countRef.current;
     const startTime = Date.now();
-    
+
     const animate = () => {
       const elapsed = Date.now() - startTime;
       const progress = Math.min(elapsed / duration, 1);
       const easeOut = 1 - Math.pow(1 - progress, 3);
       const current = start + (end - start) * easeOut;
-      
       setCount(Number(current.toFixed(decimals)));
       countRef.current = current;
-      
       if (progress < 1) requestAnimationFrame(animate);
     };
-    
+
     requestAnimationFrame(animate);
   }, [end, duration, decimals]);
-  
+
   return count;
 };
 
 // =====================================================================================
-// BACKGROUND COMPONENTS
+// SUB-COMPONENTS
 // =====================================================================================
 
 const FloatingOrbs = memo(() => (
@@ -439,28 +424,21 @@ const AnimatedGrid = memo(() => (
 ));
 AnimatedGrid.displayName = "AnimatedGrid";
 
-// =====================================================================================
-// STAT COMPONENTS
-// =====================================================================================
-
 const ProfitFactorChart = memo(({ profitFactor }: { profitFactor: number }) => {
   const normalizedValue = Math.min(profitFactor, 3);
   const percentage = (normalizedValue / 3) * 100;
-  
   const getColor = () => {
     if (profitFactor >= 2) return "text-emerald-400";
     if (profitFactor >= 1.5) return "text-green-400";
     if (profitFactor >= 1) return "text-yellow-400";
     return "text-red-400";
   };
-  
   const getBarColor = () => {
     if (profitFactor >= 2) return "bg-emerald-500";
     if (profitFactor >= 1.5) return "bg-green-500";
     if (profitFactor >= 1) return "bg-yellow-500";
     return "bg-red-500";
   };
-  
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between">
@@ -478,7 +456,10 @@ const ProfitFactorChart = memo(({ profitFactor }: { profitFactor: number }) => {
         />
       </div>
       <div className="flex justify-between text-[8px] sm:text-[10px] text-muted-foreground">
-        <span>0</span><span>1</span><span>2</span><span>3+</span>
+        <span>0</span>
+        <span>1</span>
+        <span>2</span>
+        <span>3+</span>
       </div>
     </div>
   );
@@ -496,9 +477,7 @@ const TradersLevelChart = memo(({ stats }: { stats: DashboardStats }) => {
       ),
     [stats.totalTrades, stats.winRate, stats.profitFactor, stats.totalPnL]
   );
-  
   const LevelIcon = currentLevel.icon;
-  
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between">
@@ -600,7 +579,6 @@ const StatCard = memo(
         glow: "shadow-red-500/20",
       },
     } as const;
-    
     const colors = colorClasses[color];
 
     return (
@@ -693,10 +671,6 @@ const StatCard = memo(
 );
 StatCard.displayName = "StatCard";
 
-// =====================================================================================
-// WELCOME CARD
-// =====================================================================================
-
 const WelcomeCard = memo(
   ({ userName, stats }: { userName: string; stats: DashboardStats }) => {
     const greeting = useMemo(() => {
@@ -745,7 +719,6 @@ const WelcomeCard = memo(
         <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-blue-500/5 to-purple-500/10" />
         <div className="absolute top-0 right-0 w-40 sm:w-64 h-40 sm:h-64 bg-emerald-500/10 rounded-full blur-[60px] sm:blur-[80px] dash-float" />
         <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-blue-500 to-purple-500 opacity-50" />
-        
         <CardContent className="relative z-10 p-4 sm:p-6">
           <div className="flex flex-col gap-4 sm:gap-6">
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
@@ -767,7 +740,6 @@ const WelcomeCard = memo(
                     {performanceMessage}
                   </p>
                 </div>
-                
                 <div className="flex flex-wrap items-center gap-2 sm:gap-4">
                   <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
                     <div
@@ -799,8 +771,6 @@ const WelcomeCard = memo(
                   </div>
                 </div>
               </div>
-              
-              {/* Desktop Stats */}
               <div className="hidden sm:flex flex-col items-center gap-3 flex-shrink-0">
                 <div className="relative">
                   <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-emerald-500/20 to-blue-500/20 flex items-center justify-center">
@@ -843,8 +813,6 @@ const WelcomeCard = memo(
                 </div>
               </div>
             </div>
-            
-            {/* Mobile Stats */}
             <div className="sm:hidden flex items-center justify-center gap-6">
               <div className="relative">
                 <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-500/20 to-blue-500/20 flex items-center justify-center">
@@ -894,21 +862,17 @@ const WelcomeCard = memo(
 );
 WelcomeCard.displayName = "WelcomeCard";
 
-// =====================================================================================
-// PERFORMANCE CHART
-// =====================================================================================
-
 const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const [timeframe, setTimeframe] = useState<"1W" | "1M" | "3M" | "YTD" | "ALL">("1M");
+  const [timeframe, setTimeframe] = useState<
+    "1W" | "1M" | "3M" | "YTD" | "ALL"
+  >("1M");
   const chartRef = useRef<HTMLDivElement>(null);
 
   const chartData = useMemo(() => {
     if (trades.length === 0) return [];
-    
     const now = new Date();
     let startDate = new Date();
-    
     if (timeframe === "1W") startDate.setDate(now.getDate() - 7);
     else if (timeframe === "1M") startDate.setMonth(now.getMonth() - 1);
     else if (timeframe === "3M") startDate.setMonth(now.getMonth() - 3);
@@ -925,11 +889,12 @@ const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
           new Date(a.closed_at || a.opened_at).getTime() -
           new Date(b.closed_at || b.opened_at).getTime()
       );
-      
     if (filteredTrades.length === 0) return [];
 
-    const dailyMap = new Map<string, { pnl: number; date: Date; dateStr: string }>();
-    
+    const dailyMap = new Map<
+      string,
+      { pnl: number; date: Date; dateStr: string }
+    >();
     filteredTrades.forEach((t) => {
       const dateObj = new Date(t.closed_at || t.opened_at);
       const dateKey = dateObj.toISOString().split("T")[0];
@@ -937,11 +902,9 @@ const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
         month: "short",
         day: "numeric",
       });
-      
       if (!dailyMap.has(dateKey)) {
         dailyMap.set(dateKey, { pnl: 0, date: dateObj, dateStr });
       }
-      
       const dayData = dailyMap.get(dateKey)!;
       dayData.pnl += t.profit_loss_currency || 0;
     });
@@ -950,7 +913,6 @@ const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
     const sortedDays = Array.from(dailyMap.entries()).sort(
       (a, b) => a[1].date.getTime() - b[1].date.getTime()
     );
-    
     return sortedDays.map(([_, day]) => {
       cumulative += day.pnl;
       return {
@@ -965,7 +927,6 @@ const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
   const chartPath = useMemo(() => {
     if (chartData.length < 2)
       return { linePath: "", areaPath: "", points: [] as any[] };
-      
     const padding = 0;
     const width = 100;
     const height = 100;
@@ -973,30 +934,33 @@ const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
     const maxValue = Math.max(...values);
     const minValue = Math.min(...values);
     const range = maxValue - minValue || 1;
-    
     const points = chartData.map((d, i) => ({
       x: padding + (i / (chartData.length - 1)) * (width - 2 * padding),
-      y: height - padding - ((d.value - minValue) / range) * (height - 2 * padding),
+      y:
+        height -
+        padding -
+        ((d.value - minValue) / range) * (height - 2 * padding),
       data: d,
     }));
-    
     const linePath = points
       .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
       .join(" ");
-      
-    const areaPath = `${linePath} L ${points[points.length - 1].x} ${height} L ${points[0].x} ${height} Z`;
-    
+    const areaPath = `${linePath} L ${points[points.length - 1].x} ${height} L ${
+      points[0].x
+    } ${height} Z`;
     return { linePath, areaPath, points, maxValue, minValue };
   }, [chartData]);
 
-  const periodReturn = chartData.length > 0 ? chartData[chartData.length - 1].value : 0;
-  const bestDay = chartData.length > 0 ? Math.max(...chartData.map((d) => d.pnl)) : 0;
-  const worstDay = chartData.length > 0 ? Math.min(...chartData.map((d) => d.pnl)) : 0;
+  const periodReturn =
+    chartData.length > 0 ? chartData[chartData.length - 1].value : 0;
+  const bestDay =
+    chartData.length > 0 ? Math.max(...chartData.map((d) => d.pnl)) : 0;
+  const worstDay =
+    chartData.length > 0 ? Math.min(...chartData.map((d) => d.pnl)) : 0;
 
   return (
     <Card className="dash-glass dash-card-hover relative overflow-hidden h-full">
       <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-blue-500/5" />
-      
       <CardHeader className="relative z-10 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
         <div className="flex flex-col gap-3 sm:gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -1028,7 +992,6 @@ const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
           </div>
         </div>
       </CardHeader>
-      
       <CardContent className="relative z-10 pt-2 sm:pt-4 px-3 sm:px-6 pb-3 sm:pb-6">
         <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4 sm:mb-6">
           <div className="p-2 sm:p-3 rounded-lg bg-muted/20">
@@ -1061,7 +1024,6 @@ const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
             </p>
           </div>
         </div>
-        
         <div className="relative h-48 sm:h-64" ref={chartRef}>
           {chartData.length >= 2 ? (
             <>
@@ -1071,14 +1033,15 @@ const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
                 </span>
                 <span className="truncate text-right">
                   {formatCurrency(
-                    ((chartPath.maxValue || 0) + (chartPath.minValue || 0)) / 2
+                    ((chartPath.maxValue || 0) +
+                      (chartPath.minValue || 0)) /
+                      2
                   )}
                 </span>
                 <span className="truncate text-right">
                   {formatCurrency(chartPath.minValue || 0)}
                 </span>
               </div>
-              
               <div className="ml-12 sm:ml-16 h-full relative">
                 <div className="absolute inset-0">
                   {[0, 1, 2, 3, 4].map((i) => (
@@ -1089,7 +1052,6 @@ const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
                     />
                   ))}
                 </div>
-                
                 <svg
                   className="absolute inset-0 w-full h-full"
                   viewBox="0 0 100 100"
@@ -1152,7 +1114,6 @@ const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
                     />
                   ))}
                 </svg>
-                
                 <div className="absolute inset-0 flex">
                   {chartData.map((d, i) => (
                     <div
@@ -1205,18 +1166,12 @@ const PerformanceChart = memo(({ trades }: { trades: Trade[] }) => {
 });
 PerformanceChart.displayName = "PerformanceChart";
 
-// =====================================================================================
-// RECENT TRADES
-// =====================================================================================
-
 const RecentTrades = memo(({ trades }: { trades: Trade[] }) => {
   const navigate = useNavigate();
   const recentTrades = trades.slice(0, 5);
-  
   return (
     <Card className="dash-glass dash-card-hover relative overflow-hidden h-full">
       <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5" />
-      
       <CardHeader className="relative z-10 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
@@ -1239,7 +1194,6 @@ const RecentTrades = memo(({ trades }: { trades: Trade[] }) => {
           </Button>
         </div>
       </CardHeader>
-      
       <CardContent className="relative z-10 pt-2 sm:pt-4 px-3 sm:px-6 pb-3 sm:pb-6">
         <div className="space-y-2 sm:space-y-3">
           {recentTrades.length > 0 ? (
@@ -1309,10 +1263,6 @@ const RecentTrades = memo(({ trades }: { trades: Trade[] }) => {
 });
 RecentTrades.displayName = "RecentTrades";
 
-// =====================================================================================
-// QUICK ACTIONS
-// =====================================================================================
-
 const QuickActions = memo(
   ({ onNavigate }: { onNavigate: (path: string) => void }) => {
     const actions = [
@@ -1342,18 +1292,15 @@ const QuickActions = memo(
         path: "/calendar",
       },
     ];
-    
     return (
       <Card className="dash-glass dash-card-hover relative overflow-hidden h-full">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-purple-500/8 to-pink-500/10" />
-        
         <CardHeader className="relative z-10 pb-2 px-3 sm:px-4 pt-3 sm:pt-4">
           <CardTitle className="text-sm sm:text-base text-foreground flex items-center gap-2">
             <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-400" />
             <span>Quick Actions</span>
           </CardTitle>
         </CardHeader>
-        
         <CardContent className="relative z-10 pt-1 sm:pt-2 pb-3 sm:pb-4 px-3 sm:px-4">
           <div className="grid grid-cols-2 gap-2 sm:gap-3">
             {actions.map((action, index) => (
@@ -1402,10 +1349,6 @@ const QuickActions = memo(
 );
 QuickActions.displayName = "QuickActions";
 
-// =====================================================================================
-// GOALS SETTINGS DIALOG
-// =====================================================================================
-
 const GoalsSettingsDialog = memo(
   ({
     open,
@@ -1419,16 +1362,13 @@ const GoalsSettingsDialog = memo(
     onSave: (goals: UserGoals) => void;
   }) => {
     const [localGoals, setLocalGoals] = useState<UserGoals>(goals);
-    
     useEffect(() => {
       setLocalGoals(goals);
     }, [goals]);
-    
     const handleSave = () => {
       onSave(localGoals);
       onOpenChange(false);
     };
-    
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="bg-popover text-popover-foreground border border-border max-w-md">
@@ -1441,7 +1381,6 @@ const GoalsSettingsDialog = memo(
               Set your monthly trading targets to track your progress.
             </DialogDescription>
           </DialogHeader>
-          
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="pnl-goal" className="text-foreground">
@@ -1464,7 +1403,6 @@ const GoalsSettingsDialog = memo(
                 Your target profit for the month
               </p>
             </div>
-            
             <div className="space-y-2">
               <Label htmlFor="trades-goal" className="text-foreground">
                 Monthly Trades Goal
@@ -1486,7 +1424,6 @@ const GoalsSettingsDialog = memo(
                 Number of trades you aim to execute
               </p>
             </div>
-            
             <div className="space-y-2">
               <Label htmlFor="winrate-goal" className="text-foreground">
                 Win Rate Goal (%)
@@ -1494,8 +1431,8 @@ const GoalsSettingsDialog = memo(
               <Input
                 id="winrate-goal"
                 type="number"
-                min="0"
-                max="100"
+                min={0}
+                max={100}
                 value={localGoals.win_rate_goal}
                 onChange={(e) =>
                   setLocalGoals((prev) => ({
@@ -1514,7 +1451,6 @@ const GoalsSettingsDialog = memo(
               </p>
             </div>
           </div>
-          
           <DialogFooter className="gap-2">
             <Button
               variant="outline"
@@ -1538,10 +1474,6 @@ const GoalsSettingsDialog = memo(
   }
 );
 GoalsSettingsDialog.displayName = "GoalsSettingsDialog";
-
-// =====================================================================================
-// TRADING GOALS
-// =====================================================================================
 
 const TradingGoals = memo(
   ({
@@ -1581,7 +1513,6 @@ const TradingGoals = memo(
     return (
       <Card className="dash-glass dash-card-hover relative overflow-hidden h-full">
         <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-red-500/5" />
-        
         <CardHeader className="relative z-10 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
           <div className="flex items-center justify-between gap-2">
             <CardTitle className="text-base sm:text-lg text-foreground flex items-center gap-2">
@@ -1598,7 +1529,6 @@ const TradingGoals = memo(
             </Button>
           </div>
         </CardHeader>
-        
         <CardContent className="relative z-10 pt-1 sm:pt-2 space-y-3 sm:space-y-4 px-3 sm:px-6 pb-3 sm:pb-6">
           {goalsData.map((goal) => {
             const progress =
@@ -1611,7 +1541,6 @@ const TradingGoals = memo(
               purple: "bg-purple-500",
             } as const;
             const isComplete = progress >= 100;
-            
             return (
               <div key={goal.label} className="space-y-1.5 sm:space-y-2">
                 <div className="flex items-center justify-between text-xs sm:text-sm">
@@ -1658,10 +1587,6 @@ const TradingGoals = memo(
   }
 );
 TradingGoals.displayName = "TradingGoals";
-
-// =====================================================================================
-// PERFORMANCE METRICS
-// =====================================================================================
 
 const PerformanceMetrics = memo(({ stats }: { stats: DashboardStats }) => {
   const metrics = [
@@ -1718,14 +1643,12 @@ const PerformanceMetrics = memo(({ stats }: { stats: DashboardStats }) => {
   return (
     <Card className="dash-glass dash-card-hover relative overflow-hidden h-full">
       <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-teal-500/5" />
-      
       <CardHeader className="relative z-10 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
         <CardTitle className="text-base sm:text-lg text-foreground flex items-center gap-2">
           <PieChart className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
           <span className="truncate">Performance Metrics</span>
         </CardTitle>
       </CardHeader>
-      
       <CardContent className="relative z-10 pt-1 sm:pt-2 px-3 sm:px-6 pb-3 sm:pb-6">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
           {metrics.map((metric) => (
@@ -1770,7 +1693,7 @@ const PerformanceMetrics = memo(({ stats }: { stats: DashboardStats }) => {
 PerformanceMetrics.displayName = "PerformanceMetrics";
 
 // =====================================================================================
-// MAIN DASHBOARD COMPONENT
+// MAIN DASHBOARD PAGE
 // =====================================================================================
 
 const Dashboard = () => {
@@ -1785,41 +1708,36 @@ const Dashboard = () => {
     win_rate_goal: 60,
   });
 
-  // Inject dashboard-specific styles
   useEffect(() => {
     if (!stylesInjected.current) {
-      const existingStyle = document.getElementById("dashboard-animations");
-      if (existingStyle) existingStyle.remove();
-      
       const styleSheet = document.createElement("style");
       styleSheet.id = "dashboard-animations";
-      styleSheet.textContent = DASHBOARD_STYLES;
+      styleSheet.textContent = GLOBAL_STYLES;
       document.head.appendChild(styleSheet);
       stylesInjected.current = true;
     }
-    
     setIsLoaded(true);
 
     const getUserProfile = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (user) {
         let profile: UserProfile | null = null;
-        
         try {
           const { data: profileData, error } = await supabase
             .from("profiles")
-            .select("id, display_name, full_name, first_name, last_name, username")
+            .select(
+              "id, display_name, full_name, first_name, last_name, username"
+            )
             .eq("id", user.id)
-            .maybeSingle();
-            
+            .maybeSingle(); // prevents throwing on 404
           if (!error && profileData) {
             profile = profileData as UserProfile;
           }
-        } catch {
+        } catch (e) {
           console.log("Could not fetch profile from profiles table");
         }
-
         const displayName = getUserDisplayName(profile, user.user_metadata);
         setUserName(displayName);
 
@@ -1843,8 +1761,9 @@ const Dashboard = () => {
   }, []);
 
   const handleSaveGoals = useCallback(async (newGoals: UserGoals) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (user) {
       localStorage.setItem(
         `trading_goals_${user.id}`,
@@ -1855,7 +1774,6 @@ const Dashboard = () => {
     }
   }, []);
 
-  // Fetch trades
   const { data: trades = [], refetch } = useQuery({
     queryKey: ["trades"],
     queryFn: async () => {
@@ -1863,28 +1781,41 @@ const Dashboard = () => {
         .from("trades")
         .select("*")
         .order("closed_at", { ascending: false });
-        
       if (error) throw error;
       return data as unknown as Trade[];
     },
   });
 
-  // Calculate stats
   const stats = useMemo((): DashboardStats => {
     const totalTrades = trades.length;
-    const winningTrades = trades.filter((t) => (t.profit_loss_currency || 0) > 0);
+    const winningTrades = trades.filter(
+      (t) => (t.profit_loss_currency || 0) > 0
+    );
     const wins = winningTrades.length;
-    const losingTrades = trades.filter((t) => (t.profit_loss_currency || 0) < 0);
+    const losingTrades = trades.filter(
+      (t) => (t.profit_loss_currency || 0) < 0
+    );
     const losses = losingTrades.length;
-    const breakEvenTrades = trades.filter((t) => (t.profit_loss_currency || 0) === 0);
+    const breakEvenTrades = trades.filter(
+      (t) => (t.profit_loss_currency || 0) === 0
+    );
     const breakEven = breakEvenTrades.length;
     const decisiveTrades = wins + losses;
-    const totalPnL = trades.reduce((sum, t) => sum + (t.profit_loss_currency || 0), 0);
+    const totalPnL = trades.reduce(
+      (sum, t) => sum + (t.profit_loss_currency || 0),
+      0
+    );
     const winRate = decisiveTrades > 0 ? (wins / decisiveTrades) * 100 : 0;
-    const totalWinAmount = winningTrades.reduce((sum, t) => sum + (t.profit_loss_currency || 0), 0);
+    const totalWinAmount = winningTrades.reduce(
+      (sum, t) => sum + (t.profit_loss_currency || 0),
+      0
+    );
     const avgWin = wins > 0 ? totalWinAmount / wins : 0;
     const totalLossAmount = Math.abs(
-      losingTrades.reduce((sum, t) => sum + (t.profit_loss_currency || 0), 0)
+      losingTrades.reduce(
+        (sum, t) => sum + (t.profit_loss_currency || 0),
+        0
+      )
     );
     const avgLoss = losses > 0 ? totalLossAmount / losses : 0;
     const profitFactor =
@@ -1901,7 +1832,6 @@ const Dashboard = () => {
 
     let totalDuration = 0;
     let closedTradeCount = 0;
-    
     trades.forEach((t) => {
       if (t.closed_at && t.opened_at) {
         const start = new Date(t.opened_at).getTime();
@@ -1913,8 +1843,8 @@ const Dashboard = () => {
         }
       }
     });
-    
-    const avgDurationMs = closedTradeCount > 0 ? totalDuration / closedTradeCount : 0;
+    const avgDurationMs =
+      closedTradeCount > 0 ? totalDuration / closedTradeCount : 0;
     const avgTradeDuration = formatDuration(avgDurationMs);
 
     const now = new Date();
@@ -1922,9 +1852,14 @@ const Dashboard = () => {
     const currentYear = now.getFullYear();
     const thisMonthTrades = trades.filter((t) => {
       const date = new Date(t.closed_at || t.opened_at);
-      return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+      return (
+        date.getMonth() === currentMonth && date.getFullYear() === currentYear
+      );
     });
-    const monthlyPnL = thisMonthTrades.reduce((sum, t) => sum + (t.profit_loss_currency || 0), 0);
+    const monthlyPnL = thisMonthTrades.reduce(
+      (sum, t) => sum + (t.profit_loss_currency || 0),
+      0
+    );
     const monthlyTrades = thisMonthTrades.length;
 
     let streak = 0;
@@ -1964,14 +1899,20 @@ const Dashboard = () => {
     };
   }, [trades]);
 
-  // Animated counters
-  const animatedWinRate = useAnimatedCounter(parseFloat(stats.winRate), 1500, 1);
+  const animatedWinRate = useAnimatedCounter(
+    parseFloat(stats.winRate),
+    1500,
+    1
+  );
   const animatedPnL = useAnimatedCounter(stats.totalPnL, 1500, 2);
   const animatedTrades = useAnimatedCounter(stats.totalTrades, 1500);
 
-  const handleNavigate = useCallback((path: string) => {
-    navigate(path);
-  }, [navigate]);
+  const handleNavigate = useCallback(
+    (path: string) => {
+      navigate(path);
+    },
+    [navigate]
+  );
 
   const handleRefresh = useCallback(() => {
     refetch();
@@ -1980,22 +1921,12 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground relative overflow-x-hidden">
-      {/* 
-        ═══════════════════════════════════════════════════════════════════════════════
-        MARKET TICKER - Real-time WebSocket-based ticker (same as Auth page)
-        - Connects to Binance WebSocket for crypto
-        - Connects to Finnhub WebSocket for stocks
-        - REST APIs for forex and commodities
-        - Singleton pattern prevents duplicate connections
-        ═══════════════════════════════════════════════════════════════════════════════
-      */}
+      {/* Shared market ticker (singleton WebSocket manager) */}
       <MarketTicker />
 
-      {/* Background Effects */}
       <FloatingOrbs />
       <AnimatedGrid />
 
-      {/* Goals Dialog */}
       <GoalsSettingsDialog
         open={goalsDialogOpen}
         onOpenChange={setGoalsDialogOpen}
@@ -2003,14 +1934,12 @@ const Dashboard = () => {
         onSave={handleSaveGoals}
       />
 
-      {/* Main Content - pt-10 accounts for the fixed ticker height (h-9 sm:h-10) */}
       <div
         className={cn(
-          "relative z-10 pt-12 sm:pt-14 pb-6 sm:pb-8 px-3 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full transition-all duration-700",
+          "relative z-10 pt-14 sm:pt-20 pb-6 sm:pb-8 px-3 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full transition-all duration-700",
           isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
         )}
       >
-        {/* Header */}
         <div className="flex items-center justify-between mb-6 sm:mb-8 gap-3">
           <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
             <div className="relative flex-shrink-0">
@@ -2018,16 +1947,7 @@ const Dashboard = () => {
                 <LineChart className="w-5 h-5 sm:w-6 sm:h-6 text-primary-foreground" />
               </div>
             </div>
-            <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl font-bold text-foreground truncate">
-                Dashboard
-              </h1>
-              <p className="text-xs sm:text-sm text-muted-foreground truncate">
-                Real-time trading analytics
-              </p>
-            </div>
           </div>
-          
           <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
             <Button
               variant="outline"
@@ -2055,7 +1975,6 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Welcome + Quick Actions Row */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6 mb-4 sm:mb-6">
           <div className="lg:col-span-2 dash-slide-up" style={{ animationDelay: "0ms" }}>
             <WelcomeCard userName={userName} stats={stats} />
@@ -2065,23 +1984,21 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Stats Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
-          {/* Total P&L */}
           <div className="col-span-1 sm:col-span-2 dash-slide-up" style={{ animationDelay: "100ms" }}>
             <StatCard
               title="Total P&L"
               value={formatCurrency(animatedPnL)}
               icon={DollarSign}
               trend={stats.totalPnL >= 0 ? "up" : "down"}
-              trendValue={formatPercent((stats.totalPnL / (10000 || 1)) * 100)}
+              trendValue={formatPercent(
+                (stats.totalPnL / (10000 || 1)) * 100
+              )}
               subtitle="All time"
               color={stats.totalPnL >= 0 ? "emerald" : "red"}
               size="large"
             />
           </div>
-          
-          {/* Win Rate */}
           <div className="col-span-1 sm:col-span-2 dash-slide-up" style={{ animationDelay: "150ms" }}>
             <StatCard
               title="Win Rate"
@@ -2098,8 +2015,6 @@ const Dashboard = () => {
               size="large"
             />
           </div>
-          
-          {/* Total Trades */}
           <div className="dash-slide-up" style={{ animationDelay: "200ms" }}>
             <StatCard
               title="Total Trades"
@@ -2114,8 +2029,6 @@ const Dashboard = () => {
               color="purple"
             />
           </div>
-          
-          {/* Profit Factor */}
           <div className="dash-slide-up" style={{ animationDelay: "250ms" }}>
             <StatCard
               title="Profit Factor"
@@ -2132,8 +2045,6 @@ const Dashboard = () => {
               color={stats.profitFactor >= 1.5 ? "emerald" : "orange"}
             />
           </div>
-          
-          {/* Current Streak */}
           <div className="dash-slide-up" style={{ animationDelay: "300ms" }}>
             <StatCard
               title="Current Streak"
@@ -2144,8 +2055,6 @@ const Dashboard = () => {
               color="orange"
             />
           </div>
-          
-          {/* Expectancy */}
           <div className="dash-slide-up" style={{ animationDelay: "350ms" }}>
             <StatCard
               title="Expectancy"
@@ -2157,17 +2066,14 @@ const Dashboard = () => {
             />
           </div>
 
-          {/* Performance Chart */}
           <div className="col-span-1 sm:col-span-2 lg:col-span-4 dash-slide-up" style={{ animationDelay: "400ms" }}>
             <PerformanceChart trades={trades} />
           </div>
 
-          {/* Recent Trades */}
           <div className="col-span-1 sm:col-span-2 lg:col-span-4 dash-slide-up" style={{ animationDelay: "450ms" }}>
             <RecentTrades trades={trades} />
           </div>
 
-          {/* Trading Goals */}
           <div className="col-span-1 sm:col-span-1 lg:col-span-2 dash-slide-up" style={{ animationDelay: "500ms" }}>
             <TradingGoals
               stats={stats}
@@ -2176,13 +2082,11 @@ const Dashboard = () => {
             />
           </div>
 
-          {/* Performance Metrics */}
           <div className="col-span-1 sm:col-span-1 lg:col-span-2 dash-slide-up" style={{ animationDelay: "550ms" }}>
             <PerformanceMetrics stats={stats} />
           </div>
         </div>
 
-        {/* Footer */}
         <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-border/40 flex flex-col sm:flex-row items-center justify-between gap-3 text-[10px] sm:text-xs text-muted-foreground">
           <div className="flex items-center gap-2">
             <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500" />

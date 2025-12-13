@@ -1,3 +1,4 @@
+// components/TradeForm.tsx
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -393,6 +394,7 @@ export const TradeForm = ({
   // Get existing before/after images
   const existingBeforeImage = existingImages.find(img => img.type === "BEFORE");
   const existingAfterImage = existingImages.find(img => img.type === "AFTER");
+  const otherImages = existingImages.filter(img => img.type === "OTHER");
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -716,19 +718,19 @@ export const TradeForm = ({
         </div>
       )}
 
-      {/* Image Upload - Using standard input to prevent unintended form submission */}
+      {/* Image Upload */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="before_image" className="text-gray-400 text-xs uppercase tracking-wider flex items-center gap-2">
             <Upload className="w-3 h-3" />
             {isEditing && existingBeforeImage ? "Replace Before Screenshot" : "Before Screenshot"}
           </Label>
-          <input
+          <Input
             id="before_image"
             type="file"
             accept="image/*"
             onChange={(e) => setBeforeImage(e.target.files?.[0] || null)}
-            className="flex h-10 w-full rounded-md border px-3 py-2 text-sm bg-white/5 border-white/10 text-white file:bg-white/10 file:border-0 file:text-white file:mr-4 file:py-1 file:px-3 file:rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+            className="bg-white/5 border-white/10 text-white file:bg-white/10 file:border-0 file:text-white file:mr-4 file:py-1 file:px-3 file:rounded-lg"
           />
           {beforeImage && (
             <p className="text-xs text-emerald-400">New image selected: {beforeImage.name}</p>
@@ -741,12 +743,12 @@ export const TradeForm = ({
             <Upload className="w-3 h-3" />
             {isEditing && existingAfterImage ? "Replace After Screenshot" : "After Screenshot"}
           </Label>
-          <input
+          <Input
             id="after_image"
             type="file"
             accept="image/*"
             onChange={(e) => setAfterImage(e.target.files?.[0] || null)}
-            className="flex h-10 w-full rounded-md border px-3 py-2 text-sm bg-white/5 border-white/10 text-white file:bg-white/10 file:border-0 file:text-white file:mr-4 file:py-1 file:px-3 file:rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+            className="bg-white/5 border-white/10 text-white file:bg-white/10 file:border-0 file:text-white file:mr-4 file:py-1 file:px-3 file:rounded-lg"
           />
           {afterImage && (
             <p className="text-xs text-emerald-400">New image selected: {afterImage.name}</p>
@@ -850,3 +852,5 @@ export const TradeForm = ({
     </form>
   );
 };
+
+export default TradeForm;

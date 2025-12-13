@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+// components/TradeForm.tsx
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -133,6 +134,10 @@ export const TradeForm = ({
   const [existingImages, setExistingImages] = useState<TradeImage[]>([]);
   const [imagesToDelete, setImagesToDelete] = useState<string[]>([]);
   const { toast } = useToast();
+  
+  // Refs for file inputs
+  const beforeImageRef = useRef<HTMLInputElement>(null);
+  const afterImageRef = useRef<HTMLInputElement>(null);
 
   // Prepare default values based on whether we're editing
   const getDefaultValues = (): TradeFormData => {
@@ -252,6 +257,19 @@ export const TradeForm = ({
   const handleRemoveExistingImage = (imageId: string) => {
     setImagesToDelete((prev) => [...prev, imageId]);
     setExistingImages((prev) => prev.filter((img) => img.id !== imageId));
+  };
+
+  // Handle file input changes separately to prevent form submission
+  const handleBeforeImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+    const file = e.target.files?.[0] || null;
+    setBeforeImage(file);
+  };
+
+  const handleAfterImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+    const file = e.target.files?.[0] || null;
+    setAfterImage(file);
   };
 
   const uploadImage = async (file: File, tradeId: string, type: "BEFORE" | "AFTER") => {
@@ -695,7 +713,11 @@ export const TradeForm = ({
                 </div>
                 <button
                   type="button"
-                  onClick={() => handleRemoveExistingImage(img.id)}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleRemoveExistingImage(img.id);
+                  }}
                   className="absolute -top-2 -right-2 w-6 h-6 bg-rose-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-rose-600"
                 >
                   <Trash2 className="w-3 h-3 text-white" />
@@ -716,40 +738,113 @@ export const TradeForm = ({
         </div>
       )}
 
-      {/* Image Upload - Using standard input to prevent unintended form submission */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Image Upload - Using a separate div to isolate from form submission */}
+      <div 
+        className="grid grid-cols-1 md:grid-cols-2 gap-4"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="space-y-2">
-          <Label htmlFor="before_image" className="text-gray-400 text-xs uppercase tracking-wider flex items-center gap-2">
+          <Label 
+            htmlFor="before_image" 
+            className="text-gray-400 text-xs uppercase tracking-wider flex items-center gap-2"
+          >
             <Upload className="w-3 h-3" />
             {isEditing && existingBeforeImage ? "Replace Before Screenshot" : "Before Screenshot"}
           </Label>
-          <input
-            id="before_image"
-            type="file"
-            accept="image/*"
-            onChange={(e) => setBeforeImage(e.target.files?.[0] || null)}
-            className="flex h-10 w-full rounded-md border px-3 py-2 text-sm bg-white/5 border-white/10 text-white file:bg-white/10 file:border-0 file:text-white file:mr-4 file:py-1 file:px-3 file:rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-          />
+          <div 
+            className="relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <input
+              ref={beforeImageRef}
+              id="before_image"
+              type="file"
+              accept="image/*"
+              onChange={handleBeforeImageChange}
+              onClick={(e) => e.stopPropagation()}
+              className="block w-full text-sm text-gray-400
+                file:mr-4 file:py-2 file:px-4
+                file:rounded-lg file:border-0
+                file:text-sm file:font-medium
+                file:bg-white/10 file:text-white
+                hover:file:bg-white/20
+                bg-white/5 border border-white/10 rounded-lg
+                cursor-pointer focus:outline-none"
+            />
+          </div>
           {beforeImage && (
-            <p className="text-xs text-emerald-400">New image selected: {beforeImage.name}</p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-emerald-400 truncate flex-1">
+                Selected: {beforeImage.name}
+              </p>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setBeforeImage(null);
+                  if (beforeImageRef.current) {
+                    beforeImageRef.current.value = "";
+                  }
+                }}
+                className="ml-2 text-rose-400 hover:text-rose-300"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           )}
           <p className="text-xs text-gray-500">Chart screenshot before trade entry</p>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="after_image" className="text-gray-400 text-xs uppercase tracking-wider flex items-center gap-2">
+          <Label 
+            htmlFor="after_image" 
+            className="text-gray-400 text-xs uppercase tracking-wider flex items-center gap-2"
+          >
             <Upload className="w-3 h-3" />
             {isEditing && existingAfterImage ? "Replace After Screenshot" : "After Screenshot"}
           </Label>
-          <input
-            id="after_image"
-            type="file"
-            accept="image/*"
-            onChange={(e) => setAfterImage(e.target.files?.[0] || null)}
-            className="flex h-10 w-full rounded-md border px-3 py-2 text-sm bg-white/5 border-white/10 text-white file:bg-white/10 file:border-0 file:text-white file:mr-4 file:py-1 file:px-3 file:rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-          />
+          <div 
+            className="relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <input
+              ref={afterImageRef}
+              id="after_image"
+              type="file"
+              accept="image/*"
+              onChange={handleAfterImageChange}
+              onClick={(e) => e.stopPropagation()}
+              className="block w-full text-sm text-gray-400
+                file:mr-4 file:py-2 file:px-4
+                file:rounded-lg file:border-0
+                file:text-sm file:font-medium
+                file:bg-white/10 file:text-white
+                hover:file:bg-white/20
+                bg-white/5 border border-white/10 rounded-lg
+                cursor-pointer focus:outline-none"
+            />
+          </div>
           {afterImage && (
-            <p className="text-xs text-emerald-400">New image selected: {afterImage.name}</p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-emerald-400 truncate flex-1">
+                Selected: {afterImage.name}
+              </p>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setAfterImage(null);
+                  if (afterImageRef.current) {
+                    afterImageRef.current.value = "";
+                  }
+                }}
+                className="ml-2 text-rose-400 hover:text-rose-300"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           )}
           <p className="text-xs text-gray-500">Chart screenshot after trade exit</p>
         </div>
@@ -769,6 +864,7 @@ export const TradeForm = ({
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
+                  e.stopPropagation();
                   addCustomField();
                 }
               }}
@@ -776,7 +872,11 @@ export const TradeForm = ({
             />
             <Button 
               type="button" 
-              onClick={addCustomField} 
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                addCustomField();
+              }}
               size="sm" 
               variant="outline"
               className="bg-white/5 border-white/10 text-white hover:bg-white/10"
@@ -799,7 +899,11 @@ export const TradeForm = ({
                 />
                 <Button
                   type="button"
-                  onClick={() => removeCustomField(key)}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    removeCustomField(key);
+                  }}
                   size="sm"
                   variant="ghost"
                   className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
@@ -821,7 +925,11 @@ export const TradeForm = ({
           <Button
             type="button"
             variant="ghost"
-            onClick={onCancel}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onCancel();
+            }}
             disabled={isSubmitting}
             className="text-gray-400 hover:text-white hover:bg-white/10"
           >
@@ -850,3 +958,5 @@ export const TradeForm = ({
     </form>
   );
 };
+
+export default TradeForm;
