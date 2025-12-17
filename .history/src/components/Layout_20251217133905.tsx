@@ -6,12 +6,14 @@ import {
 } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Button } from "@/components/ui/button";
-import { LogOut, CalendarDays } from "lucide-react"; // Removed TrendingUp, TrendingDown
+import { LogOut, CalendarDays, TrendingUp, TrendingDown } from "lucide-react";
 import {
   ReactNode,
   useEffect,
   useMemo,
   useState,
+  useRef,
+  memo,
 } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -29,6 +31,13 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
 // Types
+interface MarketData {
+  symbol: string;
+  price: string;
+  change: number;
+  isUp: boolean;
+}
+
 interface LayoutProps {
   children: ReactNode;
 }
@@ -39,6 +48,94 @@ type UserSnippet = {
   avatarUrl: string | null;
 };
 
+// Utility function
+const formatPercent = (value: number): string =>
+  `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
+
+// Custom hook for market data
+const useMarketData = () => {
+  const [data, setData] = useState<MarketData[]>([
+    { symbol: "BTC/USD", price: "---", change: 0, isUp: true },
+    { symbol: "ETH/USD", price: "---", change: 0, isUp: true },
+    { symbol: "SPY", price: "---", change: 0, isUp: true },
+    { symbol: "EUR/USD", price: "---", change: 0, isUp: false },
+  ]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const response = await fetch(
+          "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true"
+        );
+        const cryptoData = await response.json();
+
+        setData([
+          {
+            symbol: "BTC/USD",
+            price: cryptoData.bitcoin?.usd?.toLocaleString() || "67,234",
+            change: cryptoData.bitcoin?.usd_24h_change || 2.3,
+            isUp: (cryptoData.bitcoin?.usd_24h_change || 0) >= 0,
+          },
+          {
+            symbol: "ETH/USD",
+            price: cryptoData.ethereum?.usd?.toLocaleString() || "3,456",
+            change: cryptoData.ethereum?.usd_24h_change || 1.5,
+            isUp: (cryptoData.ethereum?.usd_24h_change || 0) >= 0,
+          },
+          { symbol: "SPY", price: "478.32", change: 0.45, isUp: true },
+          { symbol: "EUR/USD", price: "1.0872", change: -0.12, isUp: false },
+        ]);
+      } catch (error) {
+        console.error("Failed to fetch market data:", error);
+      }
+    };
+
+    fetchData();
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return data;
+};
+
+// Market Ticker Component - Static version without scrolling animation
+const MarketTicker = memo(() => {
+  const data = useMarketData();
+
+  return (
+    <div className="fixed top-0 left-0 right-0 z-50 h-10 bg-black/60 backdrop-blur-xl border-b border-white/5">
+      <div className="flex h-full items-center justify-center gap-6 px-4 overflow-hidden">
+        {data.map((item, i) => (
+          <div key={i} className="flex items-center gap-3 shrink-0">
+            <span className="text-gray-400 text-sm font-medium">{item.symbol}</span>
+            <span className="text-white text-sm font-bold">{item.price}</span>
+            <span
+              className={cn(
+                "text-xs font-semibold flex items-center gap-1",
+                item.isUp ? "text-emerald-400" : "text-red-400"
+              )}
+            >
+              {item.isUp ? (
+                <TrendingUp className="w-3 h-3" />
+              ) : (
+                <TrendingDown className="w-3 h-3" />
+              )}
+              {formatPercent(item.change)}
+            </span>
+            {i < data.length - 1 && (
+              <span className="relative flex h-2 w-2 ml-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+});
+MarketTicker.displayName = "MarketTicker";
+
 export function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -47,9 +144,9 @@ export function Layout({ children }: LayoutProps) {
   const [user, setUser] = useState<UserSnippet | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
 
-  // Fetch User
   useEffect(() => {
     let mounted = true;
+
     const loadUser = async () => {
       try {
         const { data, error } = await supabase.auth.getUser();
@@ -63,9 +160,10 @@ export function Layout({ children }: LayoutProps) {
           avatarUrl: meta.avatar_url || meta.picture || null,
         });
       } catch {
-        // ignore
+        // ignore; header still works without user
       }
     };
+
     loadUser();
     return () => {
       mounted = false;
@@ -117,30 +215,22 @@ export function Layout({ children }: LayoutProps) {
 
   return (
     <SidebarProvider>
-      {/* 
-        Layout Structure:
-        - flex h-screen: Full viewport height
-        - overflow-hidden: Prevents body scroll
-        - bg-[#05060b]: Dark background
-      */}
-      <div className="flex h-screen w-full bg-[#05060b] text-foreground overflow-hidden">
-        
-        {/* Sidebar */}
+      <MarketTicker />
+      
+      <div className="flex h-screen w-screen max-w-full bg-[#05060b] text-foreground pt-10 overflow-hidden">
         <AppSidebar />
         
-        {/* Main Content Area */}
-        <div className="flex flex-1 flex-col h-full min-w-0 overflow-hidden">
-          
+        <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
           <header
             className="flex h-16 shrink-0 items-center gap-4 border-b border-border
                        bg-gradient-to-r from-background/95 via-background/80 to-background/95
-                       backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 md:px-6 z-40 w-full"
+                       backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 md:px-6 z-40"
           >
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <SidebarTrigger className="text-muted-foreground hover:text-foreground shrink-0" />
               <Separator orientation="vertical" className="h-6 hidden sm:block shrink-0" />
               <div className="flex flex-col min-w-0">
-                <span className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/80 hidden sm:block truncate">
+                <span className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/80 hidden sm:block">
                   Workspace
                 </span>
                 <span className="text-sm md:text-base font-semibold truncate">
@@ -150,7 +240,7 @@ export function Layout({ children }: LayoutProps) {
             </div>
 
             <div className="flex items-center gap-3 shrink-0">
-              <div className="hidden sm:flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-xs text-muted-foreground whitespace-nowrap">
+              <div className="hidden sm:flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-xs text-muted-foreground">
                 <CalendarDays className="w-3.5 h-3.5" />
                 <span>{todayLabel}</span>
               </div>
@@ -163,11 +253,11 @@ export function Layout({ children }: LayoutProps) {
                   </AvatarFallback>
                 </Avatar>
 
-                <div className="hidden md:flex flex-col leading-tight min-w-0 max-w-[140px]">
-                  <span className="text-xs font-medium truncate">
+                <div className="hidden md:flex flex-col leading-tight min-w-0">
+                  <span className="text-xs font-medium truncate max-w-[140px]">
                     {user?.name || "Guest Trader"}
                   </span>
-                  <span className="text-[10px] text-muted-foreground truncate">
+                  <span className="text-[10px] text-muted-foreground truncate max-w-[140px]">
                     {user?.email || "Not signed in"}
                   </span>
                 </div>
@@ -178,11 +268,11 @@ export function Layout({ children }: LayoutProps) {
                   onClick={handleSignOut}
                   disabled={isSigningOut}
                   className={cn(
-                    "gap-1.5 ml-1 text-xs font-medium transition-all duration-200 shrink-0",
+                    "gap-1.5 ml-1 text-xs font-medium transition-all duration-200",
                     "text-gray-400 hover:text-red-400",
                     "hover:bg-red-500/10 hover:border-red-500/20",
                     "active:bg-red-500/20 active:scale-95",
-                    "rounded-lg px-2.5 py-1.5",
+                    "rounded-lg px-2.5 py-1.5 shrink-0",
                     "group"
                   )}
                 >
@@ -193,16 +283,17 @@ export function Layout({ children }: LayoutProps) {
                     )} 
                   />
                   <span className="hidden sm:inline">
-                    {isSigningOut ? "..." : "Exit"}
+                    {isSigningOut ? "Signing out..." : "Sign Out"}
                   </span>
                 </Button>
               </div>
             </div>
           </header>
 
-          {/* Scrollable Page Content */}
-          <main className="flex-1 w-full h-full overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent">
-            {children}
+          <main className="flex-1 overflow-y-auto overflow-x-hidden">
+            <div className="w-full max-w-full">
+              {children}
+            </div>
           </main>
         </div>
       </div>
