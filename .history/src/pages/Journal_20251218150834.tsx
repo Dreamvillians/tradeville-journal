@@ -130,7 +130,7 @@ const FloatingOrbs = memo(() => (
 FloatingOrbs.displayName = "FloatingOrbs";
 
 // -------------------------------------------------------------------------------------
-// Types - match DB & TradeForm
+// Types
 // -------------------------------------------------------------------------------------
 
 interface TradeImage {
@@ -146,15 +146,16 @@ interface Trade {
   direction: "LONG" | "SHORT";
   entry_price: number;
   exit_price: number | null;
+  // IMPORTANT: closed_at determines Status, profit_loss_currency determines Result
+  closed_at: string | null; 
+  profit_loss_currency: number | null;
+  profit_loss_r: number | null;
   stop_loss: number | null;
   take_profit: number | null;
   position_size: number | null;
   risk_amount: number | null;
   reward_amount: number | null;
-  profit_loss_currency: number | null;
-  profit_loss_r: number | null;
   opened_at: string;
-  closed_at: string | null;
   session: string | null;
   market_condition: string | null;
   setup_type: string | null;
@@ -222,10 +223,11 @@ const MobileTradeCard = memo(
     onEdit: (t: Trade) => void;
     onDelete: (t: Trade) => void;
   }) => {
-    const isWin =
-      trade.profit_loss_currency != null && trade.profit_loss_currency > 0;
-    const isLoss =
-      trade.profit_loss_currency != null && trade.profit_loss_currency < 0;
+    // Single Source of Truth Logic
+    const isClosed = !!trade.closed_at;
+    const pnl = trade.profit_loss_currency;
+    const isWin = pnl !== null && pnl > 0;
+    const isLoss = pnl !== null && pnl < 0;
 
     return (
       <div className="journal-glass rounded-xl p-4 space-y-3">
@@ -252,16 +254,20 @@ const MobileTradeCard = memo(
             <div
               className={cn(
                 "font-mono font-bold",
-                isWin
+                !isClosed
+                  ? "text-blue-400"
+                  : isWin
                   ? "text-emerald-400"
                   : isLoss
                   ? "text-rose-400"
                   : "text-gray-400"
               )}
             >
-              {trade.profit_loss_currency !== null
-                ? `${isWin ? "+" : ""}$${trade.profit_loss_currency.toFixed(2)}`
-                : "OPEN"}
+              {!isClosed
+                ? "OPEN"
+                : pnl !== null
+                ? `${isWin ? "+" : ""}$${pnl.toFixed(2)}`
+                : "-"}
             </div>
 
             <DropdownMenu>
@@ -290,7 +296,7 @@ const MobileTradeCard = memo(
                   className="hover:bg-white/10 cursor-pointer"
                 >
                   <Pencil className="mr-2 h-4 w-4" />
-                  Edit Trade
+                  Edit / Close
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-white/10" />
                 <DropdownMenuItem
@@ -360,7 +366,6 @@ const Journal = () => {
 
   const { toast } = useToast();
 
-  // Inject Styles once
   useEffect(() => {
     const style = document.createElement("style");
     style.id = "journal-styles";
@@ -372,7 +377,6 @@ const Journal = () => {
     };
   }, []);
 
-  // Fetch trades from Supabase
   const fetchTrades = async () => {
     try {
       const {
@@ -383,28 +387,7 @@ const Journal = () => {
       const { data, error } = await supabase
         .from("trades")
         .select(`
-          id,
-          instrument,
-          direction,
-          entry_price,
-          exit_price,
-          stop_loss,
-          take_profit,
-          position_size,
-          risk_amount,
-          reward_amount,
-          profit_loss_currency,
-          profit_loss_r,
-          opened_at,
-          closed_at,
-          session,
-          market_condition,
-          setup_type,
-          confluence,
-          execution_rating,
-          follow_plan,
-          notes,
-          custom_fields,
+          *,
           trade_images(id, url, type, description)
         `)
         .eq("user_id", user.id)
@@ -466,9 +449,7 @@ const Journal = () => {
           .delete()
           .eq("trade_id", tradeToDelete.id);
 
-        if (imagesError) {
-          console.error("Error deleting trade images:", imagesError);
-        }
+        if (imagesError) console.error("Error deleting trade images:", imagesError);
       }
 
       const { error } = await supabase
@@ -507,7 +488,6 @@ const Journal = () => {
     setShowForm(false);
   };
 
-  // Formatting helpers
   const formatPrice = (price: number | null) => {
     if (price === null || price === undefined) return "-";
     if (price < 1) return price.toFixed(5);
@@ -520,10 +500,12 @@ const Journal = () => {
     return format(new Date(dateStr), "MM/dd HH:mm");
   };
 
-  // Derived Data (filters + stats)
+  // Filter Logic
   const filteredTrades = useMemo(() => {
     return trades.filter((t) => {
+      // Determine Status from closed_at
       const isClosed = !!t.closed_at;
+
       const matchesStatus =
         statusFilter === "ALL"
           ? true
@@ -531,15 +513,15 @@ const Journal = () => {
           ? !isClosed
           : isClosed;
 
-      const q = searchQuery.toLowerCase();
       const matchesSearch =
-        t.instrument.toLowerCase().includes(q) ||
-        (t.setup_type && t.setup_type.toLowerCase().includes(q));
+        t.instrument.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (t.setup_type && t.setup_type.toLowerCase().includes(searchQuery.toLowerCase()));
 
       return matchesStatus && matchesSearch;
     });
   }, [trades, statusFilter, searchQuery]);
 
+  // Stats Logic
   const stats = useMemo(() => {
     const total = trades.length;
     const netPnL = trades.reduce(
@@ -556,7 +538,6 @@ const Journal = () => {
     return { total, netPnL, winRate, openPositions };
   }, [trades]);
 
-  // Scroll Logic for desktop table
   const updateScrollButtons = () => {
     const el = tableScrollRef.current;
     if (!el) return;
@@ -607,9 +588,7 @@ const Journal = () => {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 mb-6 sm:mb-8 flex-shrink-0">
           <StatBadge
             label="Net P&L"
-            value={`${stats.netPnL >= 0 ? "+" : ""}$${stats.netPnL.toFixed(
-              2
-            )}`}
+            value={`${stats.netPnL >= 0 ? "+" : ""}$${stats.netPnL.toFixed(2)}`}
             icon={Wallet}
             color={stats.netPnL >= 0 ? "emerald" : "rose"}
           />
@@ -789,15 +768,12 @@ const Journal = () => {
                       </TableHeader>
                       <TableBody>
                         {filteredTrades.map((trade) => {
-                          const isWin =
-                            trade.profit_loss_currency != null &&
-                            trade.profit_loss_currency > 0;
-                          const isLoss =
-                            trade.profit_loss_currency != null &&
-                            trade.profit_loss_currency < 0;
-                          const hasScreenshots =
-                            trade.trade_images &&
-                            trade.trade_images.length > 0;
+                          // SINGLE SOURCE OF TRUTH LOGIC
+                          const isClosed = !!trade.closed_at;
+                          const pnl = trade.profit_loss_currency;
+                          const isWin = pnl !== null && pnl > 0;
+                          const isLoss = pnl !== null && pnl < 0;
+                          const hasScreenshots = trade.trade_images && trade.trade_images.length > 0;
 
                           return (
                             <TableRow
@@ -808,29 +784,29 @@ const Journal = () => {
                                 {trade.instrument}
                               </TableCell>
 
-                              {/* Status derived solely from closed_at */}
+                              {/* STATUS: Derived from closed_at */}
                               <TableCell className="text-center">
                                 <Badge
                                   variant="outline"
                                   className={cn(
                                     "text-[9px] px-1.5 py-0 h-5 border-opacity-30",
-                                    trade.closed_at
-                                      ? "text-gray-400 border-gray-500"
-                                      : "text-blue-400 border-blue-500 bg-blue-500/10"
+                                    isClosed
+                                      ? "text-gray-400 border-gray-500" // Closed
+                                      : "text-blue-400 border-blue-500 bg-blue-500/10" // Open
                                   )}
                                 >
-                                  {trade.closed_at ? "CLOSED" : "OPEN"}
+                                  {isClosed ? "CLOSED" : "OPEN"}
                                 </Badge>
                               </TableCell>
 
-                              {/* Result derived solely from profit_loss_currency sign */}
+                              {/* RESULT: Derived from P&L, only shown if closed */}
                               <TableCell className="text-center">
-                                {trade.closed_at && (
+                                {isClosed && (
                                   <Badge
                                     variant="outline"
                                     className={cn(
                                       "text-[9px] px-1.5 py-0 h-5 border-opacity-30",
-                                      trade.profit_loss_currency == null
+                                      pnl === null 
                                         ? "text-gray-400 border-gray-500"
                                         : isWin
                                         ? "text-emerald-400 border-emerald-500 bg-emerald-500/10"
@@ -839,13 +815,7 @@ const Journal = () => {
                                         : "text-gray-400 border-gray-500"
                                     )}
                                   >
-                                    {trade.profit_loss_currency == null
-                                      ? "-"
-                                      : isWin
-                                      ? "WIN"
-                                      : isLoss
-                                      ? "LOSS"
-                                      : "BE"}
+                                    {pnl === null ? "-" : isWin ? "WIN" : isLoss ? "LOSS" : "BE"}
                                   </Badge>
                                 )}
                               </TableCell>
@@ -884,7 +854,7 @@ const Journal = () => {
                               </TableCell>
 
                               <TableCell className="text-right">
-                                {trade.profit_loss_currency !== null ? (
+                                {pnl !== null ? (
                                   <span
                                     className={cn(
                                       "font-mono font-bold",
@@ -896,7 +866,7 @@ const Journal = () => {
                                     )}
                                   >
                                     {isWin ? "+" : ""}
-                                    ${trade.profit_loss_currency.toFixed(2)}
+                                    ${pnl.toFixed(2)}
                                   </span>
                                 ) : (
                                   <span className="text-gray-600">-</span>
@@ -935,7 +905,6 @@ const Journal = () => {
                                 </div>
                               </TableCell>
 
-                              {/* Actions */}
                               <TableCell className="text-center">
                                 <div className="flex items-center justify-center gap-1">
                                   <Button
@@ -1075,18 +1044,20 @@ const Journal = () => {
                 <div
                   className={cn(
                     "text-3xl font-bold font-mono",
-                    (selectedTrade.profit_loss_currency || 0) > 0
-                      ? "text-emerald-400"
+                    !selectedTrade.closed_at 
+                      ? "text-blue-400" // Open
+                      : (selectedTrade.profit_loss_currency || 0) > 0
+                      ? "text-emerald-400" // Win
                       : (selectedTrade.profit_loss_currency || 0) < 0
-                      ? "text-rose-400"
-                      : "text-gray-400"
+                      ? "text-rose-400" // Loss
+                      : "text-gray-400" // BE
                   )}
                 >
-                  {selectedTrade.profit_loss_currency !== null
+                  {selectedTrade.closed_at && selectedTrade.profit_loss_currency !== null
                     ? `${
                         (selectedTrade.profit_loss_currency || 0) > 0 ? "+" : ""
                       }$${selectedTrade.profit_loss_currency.toFixed(2)}`
-                    : "OPEN"}
+                    : "OPEN TRADE"}
                 </div>
                 {selectedTrade.profit_loss_r !== null && (
                   <div className="text-sm text-gray-500 mt-1">
@@ -1349,59 +1320,6 @@ const Journal = () => {
             <AlertDialogDescription className="text-gray-400">
               Are you sure you want to delete this trade? This action cannot be
               undone.
-              {tradeToDelete && (
-                <div className="mt-3 p-3 bg-white/5 rounded-lg border border-white/10">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-white">
-                        {tradeToDelete.instrument}
-                      </span>
-                      <Badge
-                        className={cn(
-                          "text-[10px]",
-                          tradeToDelete.direction === "LONG"
-                            ? "bg-emerald-500/10 text-emerald-400"
-                            : "bg-rose-500/10 text-rose-400"
-                        )}
-                      >
-                        {tradeToDelete.direction}
-                      </Badge>
-                    </div>
-                    <span
-                      className={cn(
-                        "font-mono font-bold",
-                        (tradeToDelete.profit_loss_currency || 0) > 0
-                          ? "text-emerald-400"
-                          : (tradeToDelete.profit_loss_currency || 0) < 0
-                          ? "text-rose-400"
-                          : "text-gray-400"
-                      )}
-                    >
-                      {tradeToDelete.profit_loss_currency !== null
-                        ? `${
-                            (tradeToDelete.profit_loss_currency || 0) > 0
-                              ? "+"
-                              : ""
-                          }$${tradeToDelete.profit_loss_currency.toFixed(2)}`
-                        : "OPEN"}
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    Opened:{" "}
-                    {format(
-                      new Date(tradeToDelete.opened_at),
-                      "MMM dd, yyyy HH:mm"
-                    )}
-                  </div>
-                  {tradeToDelete.trade_images &&
-                    tradeToDelete.trade_images.length > 0 && (
-                      <div className="text-xs text-gray-500 mt-1">
-                        {tradeToDelete.trade_images.length} screenshot(s) will
-                        also be deleted
-                      </div>
-                    )}
-                </div>
-              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1416,17 +1334,7 @@ const Journal = () => {
               disabled={isDeleting}
               className="bg-rose-600 hover:bg-rose-700 text-white"
             >
-              {isDeleting ? (
-                <div className="flex items-center gap-2">
-                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
-                  Deleting...
-                </div>
-              ) : (
-                <>
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  Delete Trade
-                </>
-              )}
+              {isDeleting ? "Deleting..." : "Delete Trade"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

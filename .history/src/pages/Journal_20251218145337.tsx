@@ -372,7 +372,7 @@ const Journal = () => {
     };
   }, []);
 
-  // Fetch trades from Supabase
+  // Fetch trades
   const fetchTrades = async () => {
     try {
       const {
@@ -507,7 +507,7 @@ const Journal = () => {
     setShowForm(false);
   };
 
-  // Formatting helpers
+  // Formatting
   const formatPrice = (price: number | null) => {
     if (price === null || price === undefined) return "-";
     if (price < 1) return price.toFixed(5);
@@ -520,7 +520,7 @@ const Journal = () => {
     return format(new Date(dateStr), "MM/dd HH:mm");
   };
 
-  // Derived Data (filters + stats)
+  // Derived Data
   const filteredTrades = useMemo(() => {
     return trades.filter((t) => {
       const isClosed = !!t.closed_at;
@@ -556,7 +556,7 @@ const Journal = () => {
     return { total, netPnL, winRate, openPositions };
   }, [trades]);
 
-  // Scroll Logic for desktop table
+  // Scroll Logic
   const updateScrollButtons = () => {
     const el = tableScrollRef.current;
     if (!el) return;
@@ -808,7 +808,7 @@ const Journal = () => {
                                 {trade.instrument}
                               </TableCell>
 
-                              {/* Status derived solely from closed_at */}
+                              {/* Status derived from closed_at */}
                               <TableCell className="text-center">
                                 <Badge
                                   variant="outline"
@@ -823,7 +823,7 @@ const Journal = () => {
                                 </Badge>
                               </TableCell>
 
-                              {/* Result derived solely from profit_loss_currency sign */}
+                              {/* Result derived from profit_loss_currency sign */}
                               <TableCell className="text-center">
                                 {trade.closed_at && (
                                   <Badge

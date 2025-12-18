@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect, useMemo, memo } from "react";
 import {
   BarChart3,
@@ -13,7 +15,7 @@ import {
   Palette,
   Check,
   ChevronDown,
-  X, // <- NEW
+  X, // Added X icon
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -188,7 +190,8 @@ const ThemeSelector = memo(function ThemeSelector({ isCollapsed }: { isCollapsed
 });
 
 export function AppSidebar() {
-  const { state, isMobile, toggleSidebar } = useSidebar(); // <- UPDATED
+  // Grab isMobile and setOpenMobile from context
+  const { state, isMobile, setOpenMobile } = useSidebar();
   const isCollapsed = state === "collapsed";
 
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -265,23 +268,15 @@ export function AppSidebar() {
     <Sidebar
       collapsible="icon"
       className={cn(
-        "border-r border-border bg-sidebar-background/95 backdrop-blur-xl pt-10",
+        "border-r border-border bg-sidebar-background/95 backdrop-blur-xl pt-4 md:pt-10", // Adjusted pt for mobile
         "bg-[radial-gradient(circle_at_top,_hsl(var(--primary)/0.15),transparent_55%),radial-gradient(circle_at_bottom,_hsl(var(--accent)/0.15),transparent_55%)]"
       )}
     >
       {/* Header */}
-      <div className="px-4 pt-5 pb-6 border-b border-white/5">
-        <div
-          className={cn(
-            "flex items-center",
-            isCollapsed ? "justify-center gap-0" : "justify-between gap-3"
-          )}
-        >
+      <div className="px-4 pt-2 pb-6 border-b border-white/5">
+        <div className="flex items-center justify-between">
           <div
-            className={cn(
-              "flex items-center gap-3",
-              isCollapsed && "justify-center flex-1"
-            )}
+            className={cn("flex items-center gap-3", isCollapsed && "justify-center")}
           >
             <div className="relative inline-flex items-center justify-center h-9 w-9 rounded-2xl bg-gradient-to-br from-primary to-blue-600 shadow-lg shadow-primary/40 shrink-0">
               <Sparkles className="h-5 w-5 text-white" />
@@ -297,22 +292,17 @@ export function AppSidebar() {
               </div>
             )}
           </div>
-
-          {/* Mobile close button */}
+          
+          {/* Mobile Close Button - Only visible on mobile */}
           {isMobile && (
-            <button
-              type="button"
-              onClick={toggleSidebar}
-              className={cn(
-                "ml-2 inline-flex h-8 w-8 items-center justify-center rounded-full",
-                "border border-white/10 bg-sidebar-accent/40 text-muted-foreground",
-                "hover:bg-sidebar-accent/70 hover:text-white",
-                "transition-colors duration-200 md:hidden"
-              )}
-              aria-label="Close sidebar"
+            <Button
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setOpenMobile(false)}
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
             >
-              <X className="h-4 w-4" />
-            </button>
+              <X className="h-5 w-5" />
+            </Button>
           )}
         </div>
       </div>
@@ -332,6 +322,8 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild>
                     <NavLink
                       to={item.url}
+                      // Close sidebar on mobile when a link is clicked
+                      onClick={() => isMobile && setOpenMobile(false)}
                       end
                       className="relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm
                                 text-sidebar-foreground/80 hover:text-white
