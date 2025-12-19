@@ -96,8 +96,7 @@ const GoalsHabits = () => {
   const [habitImageFile, setHabitImageFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
-  const [notificationsEnabled, setNotificationsEnabled] =
-    useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [reminderTime, setReminderTime] = useState("09:00");
 
   const { toast } = useToast();
@@ -507,7 +506,7 @@ const GoalsHabits = () => {
       case "COMPLETED":
         return "text-emerald-500";
       case "IN_PROGRESS":
-        return "text-blue-500";
+        return "text-blue-400";
       default:
         return "text-muted-foreground";
     }
@@ -560,16 +559,15 @@ const GoalsHabits = () => {
 
         {/* Top Stats */}
         <div className="grid gap-4 md:grid-cols-4">
-          {/* TOTAL GOALS */}
           <Card className="bg-gradient-to-br from-primary/15 to-primary/5 border-primary/20">
             <CardContent className="py-4">
               <div className="flex items-center gap-3">
                 <Target className="h-5 w-5 text-primary" />
                 <div>
-                  <p className="text-xs text-primary font-medium uppercase tracking-wide">
+                  <p className="text-xs text-primary/80 font-medium uppercase tracking-wide">
                     Total Goals
                   </p>
-                  <p className="text-xl font-semibold text-foreground">
+                  <p className="text-xl font-semibold">
                     {goalStats.total}
                   </p>
                 </div>
@@ -577,16 +575,15 @@ const GoalsHabits = () => {
             </CardContent>
           </Card>
 
-          {/* COMPLETED GOALS */}
-          <Card className="bg-gradient-to-br from-emerald-500/12 to-emerald-500/5 border-emerald-500/30">
+          <Card className="bg-gradient-to-br from-emerald-500/15 to-emerald-500/5 border-emerald-500/30">
             <CardContent className="py-4">
               <div className="flex items-center gap-3">
-                <Trophy className="h-5 w-5 text-emerald-500" />
+                <Trophy className="h-5 w-5 text-emerald-400" />
                 <div>
-                  <p className="text-xs text-emerald-600 font-medium uppercase tracking-wide">
+                  <p className="text-xs text-emerald-200 font-medium uppercase tracking-wide">
                     Completed Goals
                   </p>
-                  <p className="text-xl font-semibold text-foreground">
+                  <p className="text-xl font-semibold text-emerald-100">
                     {goalStats.completed}
                   </p>
                 </div>
@@ -594,16 +591,15 @@ const GoalsHabits = () => {
             </CardContent>
           </Card>
 
-          {/* GOAL COMPLETION */}
-          <Card className="bg-gradient-to-br from-blue-500/12 to-blue-500/5 border-blue-500/30">
+          <Card className="bg-gradient-to-br from-blue-500/15 to-blue-500/5 border-blue-500/30">
             <CardContent className="py-4">
               <div className="flex items-center gap-3">
-                <Activity className="h-5 w-5 text-blue-500" />
+                <Activity className="h-5 w-5 text-blue-300" />
                 <div>
-                  <p className="text-xs text-blue-600 font-medium uppercase tracking-wide">
+                  <p className="text-xs text-blue-100 font-medium uppercase tracking-wide">
                     Goal Completion
                   </p>
-                  <p className="text-xl font-semibold text-foreground">
+                  <p className="text-xl font-semibold text-blue-50">
                     {goalStats.completionRate.toFixed(0)}%
                   </p>
                 </div>
@@ -611,16 +607,15 @@ const GoalsHabits = () => {
             </CardContent>
           </Card>
 
-          {/* TODAY'S HABIT SCORE */}
-          <Card className="bg-gradient-to-br from-emerald-500/12 to-emerald-500/5 border-emerald-500/30">
+          <Card className="bg-gradient-to-br from-emerald-500/15 to-emerald-500/5 border-emerald-500/30">
             <CardContent className="py-4">
               <div className="flex items-center gap-3">
-                <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                <CheckCircle2 className="h-5 w-5 text-emerald-300" />
                 <div>
-                  <p className="text-xs text-emerald-600 font-medium uppercase tracking-wide">
-                    Today&apos;s Habit Score
+                  <p className="text-xs text-emerald-100 font-medium uppercase tracking-wide">
+                    Today’s Habit Score
                   </p>
-                  <p className="text-xl font-semibold text-foreground">
+                  <p className="text-xl font-semibold text-emerald-50">
                     {goalStats.habitRate.toFixed(0)}%
                   </p>
                 </div>
@@ -640,7 +635,9 @@ const GoalsHabits = () => {
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium">Enable Notifications</p>
+                <p className="text-sm font-medium">
+                  Enable Notifications
+                </p>
                 <p className="text-xs text-muted-foreground">
                   Get daily reminders to track your habits.
                 </p>
@@ -655,7 +652,9 @@ const GoalsHabits = () => {
             </div>
             {notificationsEnabled && (
               <div className="space-y-2">
-                <Label htmlFor="reminder-time">Reminder Time</Label>
+                <Label htmlFor="reminder-time">
+                  Reminder Time
+                </Label>
                 <Input
                   id="reminder-time"
                   type="time"
@@ -694,7 +693,9 @@ const GoalsHabits = () => {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="goal-title">Title *</Label>
+                  <Label htmlFor="goal-title">
+                    Title *
+                  </Label>
                   <Input
                     id="goal-title"
                     value={newGoal.title}
@@ -709,7 +710,9 @@ const GoalsHabits = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="goal-category">Category</Label>
+                  <Label htmlFor="goal-category">
+                    Category
+                  </Label>
                   <Select
                     value={newGoal.category}
                     onValueChange={(value) =>
@@ -723,16 +726,26 @@ const GoalsHabits = () => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="TRADING">Trading</SelectItem>
-                      <SelectItem value="HEALTH">Health</SelectItem>
-                      <SelectItem value="PERSONAL">Personal</SelectItem>
-                      <SelectItem value="OTHER">Other</SelectItem>
+                      <SelectItem value="TRADING">
+                        Trading
+                      </SelectItem>
+                      <SelectItem value="HEALTH">
+                        Health
+                      </SelectItem>
+                      <SelectItem value="PERSONAL">
+                        Personal
+                      </SelectItem>
+                      <SelectItem value="OTHER">
+                        Other
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="goal-description">Description</Label>
+                  <Label htmlFor="goal-description">
+                    Description
+                  </Label>
                   <Textarea
                     id="goal-description"
                     value={newGoal.description}
@@ -749,7 +762,9 @@ const GoalsHabits = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="goal-metric">Target Metric</Label>
+                    <Label htmlFor="goal-metric">
+                      Target Metric
+                    </Label>
                     <Input
                       id="goal-metric"
                       value={newGoal.target_metric}
@@ -764,7 +779,9 @@ const GoalsHabits = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="goal-due-date">Due Date</Label>
+                    <Label htmlFor="goal-due-date">
+                      Due Date
+                    </Label>
                     <Input
                       id="goal-due-date"
                       type="date"
@@ -780,7 +797,9 @@ const GoalsHabits = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="goal-image">Upload Image (optional)</Label>
+                  <Label htmlFor="goal-image">
+                    Upload Image (optional)
+                  </Label>
                   <div className="flex gap-2 items-center">
                     <Input
                       id="goal-image"
@@ -829,7 +848,8 @@ const GoalsHabits = () => {
                 <CardContent className="py-12 text-center">
                   <Target className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                   <p className="text-muted-foreground">
-                    No goals yet. Create your first goal to get started!
+                    No goals yet. Create your first goal to get
+                    started!
                   </p>
                 </CardContent>
               </Card>
@@ -877,7 +897,10 @@ const GoalsHabits = () => {
                           {goal.due_date && (
                             <span className="flex items-center gap-1">
                               <Calendar className="h-3 w-3" />
-                              {format(new Date(goal.due_date), "MMM d, yyyy")}
+                              {format(
+                                new Date(goal.due_date),
+                                "MMM d, yyyy"
+                              )}
                             </span>
                           )}
                         </div>
@@ -1064,7 +1087,8 @@ const GoalsHabits = () => {
                 <CardContent className="py-12 text-center">
                   <CheckCircle2 className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                   <p className="text-muted-foreground">
-                    No habits yet. Create your first habit to track!
+                    No habits yet. Create your first habit
+                    to track!
                   </p>
                 </CardContent>
               </Card>

@@ -67,7 +67,11 @@ type UserProfile = {
 };
 
 // Theme Selector Component
-const ThemeSelector = memo(function ThemeSelector({ isCollapsed }: { isCollapsed: boolean }) {
+const ThemeSelector = memo(function ThemeSelector({
+  isCollapsed,
+}: {
+  isCollapsed: boolean;
+}) {
   const { theme, setTheme, themes, currentTheme } = useTheme();
   const [open, setOpen] = useState(false);
 
@@ -81,9 +85,9 @@ const ThemeSelector = memo(function ThemeSelector({ isCollapsed }: { isCollapsed
           size="sm"
           className={cn(
             "w-full justify-start gap-3 px-3 py-2.5 rounded-xl",
-            // CHANGED: Use semantic colors instead of text-white
-            "text-sidebar-foreground/70 hover:text-sidebar-foreground",
-            "hover:bg-sidebar-accent transition-all duration-200",
+            // use sidebar-foreground token so it adapts per theme
+            "text-sidebar-foreground/80 hover:text-sidebar-foreground",
+            "hover:bg-sidebar-accent/40 transition-all duration-200",
             isCollapsed && "justify-center px-2"
           )}
         >
@@ -91,15 +95,15 @@ const ThemeSelector = memo(function ThemeSelector({ isCollapsed }: { isCollapsed
             className={cn(
               "h-5 w-5 rounded-md flex items-center justify-center shrink-0",
               "bg-gradient-to-br",
-              currentTheme.colors.primary,
-              "text-white" // Keep icon white as it sits on a colored gradient
+              currentTheme.colors.primary
             )}
           >
-            <ThemeIcon className="h-3 w-3" />
+            {/* Icon on primary gradient can safely stay white */}
+            <ThemeIcon className="h-3 w-3 text-white" />
           </div>
           {!isCollapsed && (
             <>
-              <span className="flex-1 text-left text-sm truncate font-medium">
+              <span className="flex-1 text-left text-sm truncate">
                 {currentTheme.name}
               </span>
               <ChevronDown
@@ -115,8 +119,7 @@ const ThemeSelector = memo(function ThemeSelector({ isCollapsed }: { isCollapsed
       <PopoverContent
         side={isCollapsed ? "right" : "top"}
         align={isCollapsed ? "start" : "center"}
-        // CHANGED: Removed hardcoded bg/border, used semantic border
-        className="w-64 p-2 border-border shadow-lg"
+        className="w-64 p-2 bg-popover/95 backdrop-blur-xl border-border"
         sideOffset={8}
       >
         <div className="space-y-1">
@@ -148,14 +151,13 @@ const ThemeSelector = memo(function ThemeSelector({ isCollapsed }: { isCollapsed
                   {/* Theme preview */}
                   <div
                     className={cn(
-                      "h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ring-1 ring-border/20",
+                      "h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ring-1 ring-border",
                       t.colors.preview
                     )}
                   >
                     <Icon
                       className={cn(
                         "h-4 w-4",
-                        // Keep these conditional based on the specific preview color, not the theme
                         t.id === "light" ? "text-slate-700" : "text-white"
                       )}
                     />
@@ -192,7 +194,7 @@ const ThemeSelector = memo(function ThemeSelector({ isCollapsed }: { isCollapsed
 });
 
 export function AppSidebar() {
-  const { state, isMobile, setOpenMobile } = useSidebar();
+  const { state, isMobile, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
 
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -208,7 +210,7 @@ export function AppSidebar() {
         if (error) throw error;
         if (!data.user || !mounted) return;
 
-        const meta = data.user.user_metadata || {};
+        const meta = (data.user.user_metadata || {}) as Record<string, any>;
         setUser({
           name: meta.full_name || meta.name || null,
           email: data.user.email ?? null,
@@ -225,9 +227,9 @@ export function AppSidebar() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
-        const meta = session.user.user_metadata || {};
+        const meta = (session.user.user_metadata || {}) as Record<string, any>;
         setUser({
           name: meta.full_name || meta.name || null,
           email: session.user.email ?? null,
@@ -269,21 +271,26 @@ export function AppSidebar() {
     <Sidebar
       collapsible="icon"
       className={cn(
-        // CHANGED: Use semantic border color
-        "border-r border-sidebar-border bg-sidebar pt-4 md:pt-10",
-        // Kept the gradient but made it subtle enough for both light/dark, 
-        // or relies on CSS variables for hsl opacity
-        "bg-[radial-gradient(circle_at_top,_hsl(var(--primary)/0.08),transparent_55%),radial-gradient(circle_at_bottom,_hsl(var(--accent)/0.08),transparent_55%)]"
+        "border-r border-border bg-sidebar-background/95 backdrop-blur-xl pt-10",
+        "bg-[radial-gradient(circle_at_top,_hsl(var(--primary)/0.15),transparent_55%),radial-gradient(circle_at_bottom,_hsl(var(--accent)/0.15),transparent_55%)]"
       )}
     >
       {/* Header */}
-      {/* CHANGED: border-white/5 -> border-sidebar-border */}
-      <div className="px-4 pt-2 pb-6 border-b border-sidebar-border">
-        <div className="flex items-center justify-between">
+      <div className="px-4 pt-5 pb-6 border-b border-border/60">
+        <div
+          className={cn(
+            "flex items-center",
+            isCollapsed ? "justify-center gap-0" : "justify-between gap-3"
+          )}
+        >
           <div
-            className={cn("flex items-center gap-3", isCollapsed && "justify-center")}
+            className={cn(
+              "flex items-center gap-3",
+              isCollapsed && "justify-center flex-1"
+            )}
           >
             <div className="relative inline-flex items-center justify-center h-9 w-9 rounded-2xl bg-gradient-to-br from-primary to-blue-600 shadow-lg shadow-primary/40 shrink-0">
+              {/* Icon over strong gradient: white is fine for all themes */}
               <Sparkles className="h-5 w-5 text-white" />
             </div>
             {!isCollapsed && (
@@ -297,17 +304,22 @@ export function AppSidebar() {
               </div>
             )}
           </div>
-          
-          {/* Mobile Close Button */}
+
+          {/* Mobile close button */}
           {isMobile && (
-            <Button
-              variant="ghost" 
-              size="icon" 
-              onClick={() => setOpenMobile(false)}
-              className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent"
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              className={cn(
+                "ml-2 inline-flex h-8 w-8 items-center justify-center rounded-full",
+                "border border-border bg-sidebar-background/80 text-muted-foreground",
+                "hover:bg-sidebar-accent/60 hover:text-foreground",
+                "transition-colors duration-200 md:hidden"
+              )}
+              aria-label="Close sidebar"
             >
-              <X className="h-5 w-5" />
-            </Button>
+              <X className="h-4 w-4" />
+            </button>
           )}
         </div>
       </div>
@@ -327,18 +339,16 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild>
                     <NavLink
                       to={item.url}
-                      onClick={() => isMobile && setOpenMobile(false)}
                       end
                       className="relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm
-                                text-sidebar-foreground/70 hover:text-sidebar-foreground
-                                hover:bg-sidebar-accent transition-all duration-200
+                                text-sidebar-foreground/80 hover:text-sidebar-foreground
+                                hover:bg-sidebar-accent/40 transition-all duration-200
                                 group overflow-hidden"
-                      activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
+                      activeClassName="bg-gradient-to-r from-primary/25 via-primary/10 to-transparent
+                                      text-sidebar-primary font-medium shadow-[0_0_0_1px_hsl(var(--primary)/0.45)]"
                     >
-                      {/* Active indicator line */}
                       <span className="absolute left-0 top-0 h-full w-0.5 bg-primary/70 opacity-0 group-[&.active]:opacity-100" />
-                      
-                      <item.icon className="h-5 w-5 shrink-0 text-sidebar-foreground/70 group-[&.active]:text-primary" />
+                      <item.icon className="h-5 w-5 shrink-0 text-sidebar-foreground/80 group-[&.active]:text-primary" />
                       {!isCollapsed && (
                         <span className="truncate">{item.title}</span>
                       )}
@@ -364,16 +374,14 @@ export function AppSidebar() {
       </SidebarContent>
 
       {/* Footer / Profile */}
-      {/* CHANGED: border-white/5 -> border-sidebar-border */}
-      <SidebarFooter className="border-t border-sidebar-border p-3">
+      <SidebarFooter className="border-t border-border/60 p-3">
         <div
           className={cn(
-            "flex items-center gap-3 p-2 rounded-xl hover:bg-sidebar-accent transition-all duration-200 cursor-pointer group",
+            "flex items-center gap-3 p-2 rounded-xl hover:bg-sidebar-accent/50 transition-all duration-200 cursor-pointer group",
             isCollapsed ? "justify-center" : "justify-start"
           )}
         >
-          {/* CHANGED: border-white/10 -> border-border */}
-          <Avatar className="h-9 w-9 border border-border shadow-sm shrink-0 transition-transform duration-200 group-hover:scale-105">
+          <Avatar className="h-9 w-9 border border-border/70 shadow-sm shrink-0 transition-transform duration-200 group-hover:scale-105">
             {user?.avatarUrl && (
               <AvatarImage
                 src={user.avatarUrl}
@@ -398,10 +406,9 @@ export function AppSidebar() {
           {!isCollapsed && (
             <>
               <div className="flex-1 min-w-0">
-                {/* CHANGED: text-sidebar-foreground (removes hardcoded hover:text-white) */}
-                <p className="text-sm font-medium text-sidebar-foreground truncate transition-colors">
+                <p className="text-sm font-medium text-sidebar-foreground truncate group-hover:text-foreground transition-colors">
                   {isLoading ? (
-                    <span className="inline-block w-20 h-4 bg-sidebar-accent rounded animate-pulse" />
+                    <span className="inline-block w-20 h-4 bg-border rounded animate-pulse" />
                   ) : (
                     displayName
                   )}

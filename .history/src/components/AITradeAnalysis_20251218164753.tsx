@@ -90,7 +90,7 @@ export const AITradeAnalysis = ({ period = "all" }: AITradeAnalysisProps) => {
             <Sparkles className="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p className="mb-2">Get AI-powered insights on your trading performance</p>
             <p className="text-sm">
-              Click "Generate Analysis" to receive personalized recommendations.
+              Click "Generate Analysis" to receive personalized recommendations
             </p>
           </div>
         )}

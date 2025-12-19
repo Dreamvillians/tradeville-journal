@@ -1,0 +1,247 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700;800&family=JetBrains+Mono:wght@400;500&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* ----------------------------------------------------------------------- */
+  /* DEFAULT THEME (Dark / Financial Luxury)                                 */
+  /* ----------------------------------------------------------------------- */
+  :root {
+    /* Base */
+    --background: 222 47% 4%;
+    --foreground: 210 40% 98%;
+
+    /* UI Elements */
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 6%;
+    --popover-foreground: 210 40% 98%;
+
+    /* Brand Colors */
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 4%;
+    --secondary: 215 25% 15%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 215 25% 12%;
+    --muted-foreground: 215 16% 65%;
+    --accent: 217 91% 60%;
+    --accent-foreground: 222 47% 4%;
+
+    /* Status */
+    --destructive: 347 77% 60%; /* Rose */
+    --destructive-foreground: 210 40% 98%;
+    --success: 142 76% 36%; /* Emerald */
+    --success-foreground: 210 40% 98%;
+
+    /* Borders & Inputs */
+    --border: 215 25% 15%;
+    --input: 215 25% 15%;
+    --ring: 217 91% 60%;
+    --radius: 0.75rem;
+
+    /* Sidebar Specifics */
+    --sidebar-background: 222 47% 6%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 222 47% 4%;
+    --sidebar-accent: 215 25% 12%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 215 25% 15%;
+    --sidebar-ring: 217 91% 60%;
+  }
+
+  /* ----------------------------------------------------------------------- */
+  /* LIGHT THEME                                                             */
+  /* ----------------------------------------------------------------------- */
+  [data-theme="light"] {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%; /* Dark text for contrast */
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 221 83% 53%; /* Bright Blue */
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --success: 142 71% 45%;
+    --success-foreground: 210 40% 98%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 221 83% 53%;
+
+    /* Sidebar - Light */
+    --sidebar-background: 0 0% 98%; /* Slightly off-white */
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 221 83% 53%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 40% 93%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217 91% 60%;
+  }
+
+  /* ----------------------------------------------------------------------- */
+  /* MIDNIGHT THEME                                                          */
+  /* ----------------------------------------------------------------------- */
+  [data-theme="midnight"] {
+    --background: 230 35% 7%;
+    --foreground: 210 40% 98%;
+    --card: 230 35% 10%;
+    --card-foreground: 210 40% 98%;
+    --popover: 230 35% 9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 100% 65%; /* Bright Cyan/Blue */
+    --primary-foreground: 230 35% 7%;
+    --muted: 230 25% 15%;
+    --muted-foreground: 215 20% 70%;
+    --border: 230 25% 18%;
+    --input: 230 25% 18%;
+
+    --sidebar-background: 230 35% 8%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-accent: 230 25% 15%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 230 25% 18%;
+  }
+
+  /* ----------------------------------------------------------------------- */
+  /* EMERALD THEME                                                           */
+  /* ----------------------------------------------------------------------- */
+  [data-theme="emerald"] {
+    --background: 160 30% 5%;
+    --foreground: 150 20% 97%;
+    --card: 160 30% 8%;
+    --card-foreground: 150 20% 97%;
+    --popover: 160 30% 7%;
+    --popover-foreground: 150 20% 97%;
+    --primary: 150 60% 45%; /* Emerald */
+    --primary-foreground: 0 0% 100%;
+    --muted: 160 20% 12%;
+    --muted-foreground: 150 10% 70%;
+    --border: 160 20% 15%;
+    --input: 160 20% 15%;
+
+    --sidebar-background: 160 30% 6%;
+    --sidebar-foreground: 150 20% 97%;
+    --sidebar-accent: 160 20% 12%;
+    --sidebar-accent-foreground: 150 20% 97%;
+    --sidebar-border: 160 20% 15%;
+  }
+
+  /* ----------------------------------------------------------------------- */
+  /* GREY (MONOCHROME) THEME                                                 */
+  /* ----------------------------------------------------------------------- */
+  [data-theme="grey"] {
+    --background: 0 0% 5%;
+    --foreground: 0 0% 95%;
+    --card: 0 0% 10%;
+    --card-foreground: 0 0% 95%;
+    --popover: 0 0% 9%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 0 0% 80%;
+    --primary-foreground: 0 0% 0%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 60%;
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+
+    --sidebar-background: 0 0% 8%;
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-accent: 0 0% 15%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 0 0% 20%;
+  }
+
+  /* ---------------------------------------------------------------------------
+     Standard Resets
+     --------------------------------------------------------------------------- */
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* ============================================================================
+   COMPONENT STYLES (Adapted for multi-theme)
+   ============================================================================ */
+@layer components {
+  /* 
+     IMPORTANT: We use bg-card/opacity instead of bg-white/opacity 
+     so glass effects work in light mode too.
+  */
+  .glass {
+    @apply bg-card/60 backdrop-blur-md border border-border/50;
+  }
+
+  .glass-card {
+    @apply bg-card/40 backdrop-blur-md border border-border/50 rounded-xl;
+    @apply transition-all duration-300 ease-out;
+  }
+
+  .glass-card-hover {
+    @apply hover:bg-card/60 hover:border-border;
+    @apply hover:-translate-y-0.5 hover:shadow-xl;
+  }
+
+  .stat-card {
+    @apply relative overflow-hidden rounded-xl;
+    @apply bg-card/40 border border-border/50;
+    @apply transition-all duration-300 ease-out;
+  }
+
+  .stat-card:hover {
+    @apply bg-card/60 border-border;
+    @apply -translate-y-0.5 shadow-xl;
+  }
+
+  /* Skeleton */
+  .skeleton {
+    @apply animate-pulse rounded-xl bg-muted;
+  }
+
+  /* Badges - using CSS vars to adapt colors */
+  .badge-profit {
+    @apply bg-success/10 text-success border border-success/20;
+  }
+  .badge-loss {
+    @apply bg-destructive/10 text-destructive border border-destructive/20;
+  }
+  .badge-neutral {
+    @apply bg-muted text-muted-foreground border border-border;
+  }
+}
+
+/* ============================================================================
+   UTILITIES
+   ============================================================================ */
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-primary to-accent;
+  }
+
+  /* Hide scrollbar */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
